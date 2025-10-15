@@ -57,14 +57,14 @@ Edita el archivo `includes/db_connection.php` si es necesario:
 ## 👥 Contribuir al Proyecto
 
 Si deseas contribuir al proyecto:
-
+```bash
 1. **Realiza tus cambios y haz commit**
    git add .
    git commit -m "Agregar nueva funcionalidad: descripción"
 
 2. **Push a tu fork**
    git push origin feature/nueva-funcionalidad
-
+```
 
 
 ## 🔄 Comandos Git Útiles

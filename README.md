@@ -19,9 +19,9 @@ El Sistema de Gestión Hotelera es una aplicación web diseñada para facilitar 
 ## 🛠️ Tecnologías Utilizadas
 
 - **Frontend**: HTML5, CSS3, JavaScript
-- **Backend**: PHP 7.4+
+- **Backend**: PHP
 - **Base de Datos**: MySQL
-- **Servidor Web**: Apache (XAMPP, WAMP, LAMP o similar)
+- **Servidor Web**: Apache (XAMPP)
 
 ### Instalación Paso a Paso
 

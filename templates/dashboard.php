@@ -28,7 +28,7 @@ if ($res && $res->num_rows > 0) {
 
 // Reservas Hoy (cantidad de reservas cuyo rango incluye hoy)
 $reservas_hoy = 0;
-if ($stmt = $conn->prepare("SELECT COUNT(*) AS cnt FROM reserva WHERE fecha_entrada <= ? AND fecha_salida >= ?")) {
+if ($stmt = $conn->prepare("SELECT COUNT(*) AS cnt FROM reserva WHERE fecha_entrada <= ? AND fecha_salida >= ? AND estado != 'cancelada'")) {
     $stmt->bind_param('ss', $today, $today);
     $stmt->execute();
     $res = $stmt->get_result();
@@ -57,17 +57,18 @@ if ($res = $conn->query("SHOW TABLES LIKE 'habitacion'")) {
     }
 }
 
-// Intento de ingresos hoy si la columna 'total' existe en 'reserva'
-$ingresos_hoy = null;
-$col = $conn->query("SHOW COLUMNS FROM reserva LIKE 'total'");
-if ($col && $col->num_rows > 0) {
-    if ($stmt = $conn->prepare("SELECT IFNULL(SUM(total),0) AS s FROM reserva WHERE fecha_entrada = ?")) {
-        $stmt->bind_param('s', $today);
-        $stmt->execute();
-        $r = $stmt->get_result()->fetch_assoc();
-        $ingresos_hoy = floatval($r['s'] ?? 0);
-        $stmt->close();
-    }
+// Ingresos hoy - calcular desde reservas que tienen check-in hoy
+$ingresos_hoy = 0;
+if ($stmt = $conn->prepare("SELECT SUM(DATEDIFF(r.fecha_salida, r.fecha_entrada) * h.precio_por_noche) AS total 
+                             FROM reserva r 
+                             INNER JOIN habitacion h ON r.numero_habitacion = h.numero_habitacion 
+                             WHERE r.fecha_entrada = ? 
+                             AND r.estado != 'cancelada'")) {
+    $stmt->bind_param('s', $today);
+    $stmt->execute();
+    $r = $stmt->get_result()->fetch_assoc();
+    $ingresos_hoy = floatval($r['total'] ?? 0);
+    $stmt->close();
 }
 
 // Recent activity: últimas 6 reservas
@@ -122,72 +123,74 @@ if ($habitaciones_exist) {
                 </div>
             </header>
 
-            <div class="dashboard-content">
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-icon">🛏️</div>
-                        <div class="stat-info">
-                            <h3>Habitaciones Ocupadas</h3>
-                            <p class="stat-number"><?php echo $ocupadas_detalle; ?><?php echo $total_habitaciones !== null ? "/{$total_habitaciones}" : ''; ?></p>
+            <div class="content-area">
+                <div class="dashboard-content">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon">🛏️</div>
+                            <div class="stat-info">
+                                <h3>Habitaciones Ocupadas</h3>
+                                <p class="stat-number"><?php echo $ocupadas_detalle; ?><?php echo $total_habitaciones !== null ? "/{$total_habitaciones}" : ''; ?></p>
+                            </div>
                         </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon">📅</div>
-                        <div class="stat-info">
-                            <h3>Reservas Hoy</h3>
-                            <p class="stat-number"><?php echo $reservas_hoy; ?></p>
+                        <div class="stat-card">
+                            <div class="stat-icon">📅</div>
+                            <div class="stat-info">
+                                <h3>Reservas Hoy</h3>
+                                <p class="stat-number"><?php echo $reservas_hoy; ?></p>
+                            </div>
                         </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon">👥</div>
-                        <div class="stat-info">
-                            <h3>Huéspedes Activos</h3>
-                            <p class="stat-number"><?php echo $huespedes_activos; ?></p>
+                        <div class="stat-card">
+                            <div class="stat-icon">👥</div>
+                            <div class="stat-info">
+                                <h3>Huéspedes Activos</h3>
+                                <p class="stat-number"><?php echo $huespedes_activos; ?></p>
+                            </div>
                         </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon">💰</div>
-                        <div class="stat-info">
-                            <h3>Ingresos Hoy</h3>
-                            <p class="stat-number"><?php echo $ingresos_hoy !== null ? '$' . number_format($ingresos_hoy,2,',','.') : 'N/D'; ?></p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="dashboard-sections">
-                    <div class="section">
-                        <h2>Actividad Reciente</h2>
-                        <div class="activity-list">
-                            <?php if (empty($actividad)): ?>
-                                <div class="activity-item"><span>No hay actividad reciente.</span></div>
-                            <?php else: ?>
-                                <?php foreach ($actividad as $a): ?>
-                                    <div class="activity-item">
-                                        <span class="activity-time"><?php echo date('d/m H:i', strtotime($a['fecha_hora_reserva'])); ?></span>
-                                        <span class="activity-text">
-                                            Reserva: Hab. <?php echo htmlspecialchars($a['numero_habitacion']); ?> - <?php echo htmlspecialchars(($a['nombre'] ?? '') . ' ' . ($a['apellido'] ?? '')); ?>
-                                            (<?php echo htmlspecialchars($a['fecha_entrada']); ?> → <?php echo htmlspecialchars($a['fecha_salida']); ?>)
-                                        </span>
-                                    </div>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
+                        <div class="stat-card">
+                            <div class="stat-icon">💰</div>
+                            <div class="stat-info">
+                                <h3>Ingresos Hoy</h3>
+                                <p class="stat-number">$<?php echo number_format($ingresos_hoy, 2, '.', ','); ?></p>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="section">
-                        <h2>Estado de Habitaciones</h2>
-                        <div class="room-status">
-                            <div class="status-item">
-                                <span class="status-color occupied"></span>
-                                <span>Ocupadas: <?php echo $ocupadas_detalle; ?></span>
+                    <div class="dashboard-sections">
+                        <div class="section">
+                            <h2>Actividad Reciente</h2>
+                            <div class="activity-list">
+                                <?php if (empty($actividad)): ?>
+                                    <div class="activity-item"><span>No hay actividad reciente.</span></div>
+                                <?php else: ?>
+                                    <?php foreach ($actividad as $a): ?>
+                                        <div class="activity-item">
+                                            <span class="activity-time"><?php echo date('d/m H:i', strtotime($a['fecha_hora_reserva'])); ?></span>
+                                            <span class="activity-text">
+                                                Reserva: Hab. <?php echo htmlspecialchars($a['numero_habitacion']); ?> - <?php echo htmlspecialchars(($a['nombre'] ?? '') . ' ' . ($a['apellido'] ?? '')); ?>
+                                                (<?php echo htmlspecialchars($a['fecha_entrada']); ?> → <?php echo htmlspecialchars($a['fecha_salida']); ?>)
+                                            </span>
+                                        </div>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
                             </div>
-                            <div class="status-item">
-                                <span class="status-color available"></span>
-                                <span>Disponibles: <?php echo $disponibles !== null ? $disponibles : 'N/D'; ?></span>
-                            </div>
-                            <div class="status-item">
-                                <span class="status-color maintenance"></span>
-                                <span>Mantenimiento: <?php echo $en_mantenimiento; ?></span>
+                        </div>
+
+                        <div class="section">
+                            <h2>Estado de Habitaciones</h2>
+                            <div class="room-status">
+                                <div class="status-item">
+                                    <span class="status-color occupied"></span>
+                                    <span>Ocupadas: <?php echo $ocupadas_detalle; ?></span>
+                                </div>
+                                <div class="status-item">
+                                    <span class="status-color available"></span>
+                                    <span>Disponibles: <?php echo $disponibles !== null ? $disponibles : 'N/D'; ?></span>
+                                </div>
+                                <div class="status-item">
+                                    <span class="status-color maintenance"></span>
+                                    <span>Mantenimiento: <?php echo $en_mantenimiento; ?></span>
+                                </div>
                             </div>
                         </div>
                     </div>

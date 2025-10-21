@@ -840,3 +840,112 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* Additional status styles for reservations */
+.status.confirmada {
+  background: #d4edda;
+  color: #155724;
+}
+
+.status.pendiente {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.status.cancelada {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+/* Button danger style */
+.btn-danger {
+  background: #e74c3c;
+  color: white;
+}
+
+.btn-danger:hover {
+  background: #c0392b;
+}
+
+/* No data message style */
+.no-data {
+  text-align: center;
+  padding: 40px;
+  color: #6c757d;
+  font-style: italic;
+}
+
+/* Modal display flex */
+.modal.show {
+  display: flex !important;
+}
+
+/* Form elements improvements */
+.form-group p {
+  margin: 0;
+  padding: 10px 0;
+  color: #2c3e50;
+}
+
+/* Report card improvements */
+.report-card .no-data {
+  padding: 20px;
+  font-size: 14px;
+}
+
+/* Responsive adjustments for smaller screens */
+@media (max-width: 1200px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .dashboard-sections {
+    grid-template-columns: 1fr;
+  }
+
+  .reports-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .filters {
+    flex-direction: column;
+  }
+
+  .filter-input,
+  .filter-select {
+    width: 100%;
+  }
+}
+.no-data {
+  text-align: center;
+  padding: 40px;
+  color: #6c757d;
+}
+
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-danger {
+  background: #e74c3c;
+  color: white;
+}
+
+.btn-danger:hover {
+  background: #c0392b;
+}

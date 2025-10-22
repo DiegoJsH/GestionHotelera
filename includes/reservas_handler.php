@@ -252,11 +252,22 @@ function obtenerHuespedes($conn) {
     return $huespedes;
 }
 
-// Función para obtener habitaciones disponibles
+// CORRECCIÓN: Función mejorada para obtener habitaciones disponibles (excluyendo mantenimiento)
 function obtenerHabitacionesDisponibles($conn, $fecha_entrada, $fecha_salida, $id_reserva = null) {
+    // Primera parte: obtener habitaciones que NO están en mantenimiento
+    // y que NO tienen reservas en el rango de fechas
     $sql = "SELECT DISTINCT h.numero_habitacion, h.tipo, h.precio_por_noche, h.capacidad 
             FROM habitacion h 
-            WHERE h.numero_habitacion NOT IN (
+            WHERE 1=1";
+    
+    // CORRECCIÓN: Excluir habitaciones en mantenimiento si existe la columna estado
+    $checkColumn = $conn->query("SHOW COLUMNS FROM habitacion LIKE 'estado'");
+    if ($checkColumn && $checkColumn->num_rows > 0) {
+        $sql .= " AND (h.estado IS NULL OR h.estado NOT LIKE '%manten%')";
+    }
+    
+    // Excluir habitaciones con reservas en el rango de fechas
+    $sql .= " AND h.numero_habitacion NOT IN (
                 SELECT r.numero_habitacion 
                 FROM reserva r 
                 WHERE r.estado != 'cancelada'";

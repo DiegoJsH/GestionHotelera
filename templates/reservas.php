@@ -387,9 +387,13 @@ if (!isset($_SESSION['admin_id'])) {
             cargarHuespedes();
             
             // Establecer fecha mínima como hoy
-            const hoy = new Date().toISOString().split('T')[0];
-            document.getElementById('fecha_entrada').setAttribute('min', hoy);
-            document.getElementById('fecha_salida').setAttribute('min', hoy);
+            const hoy = new Date();
+            // Ajustar a la zona horaria local
+            hoy.setMinutes(hoy.getMinutes() - hoy.getTimezoneOffset());
+            const fechaHoy = hoy.toISOString().split('T')[0];
+            
+            document.getElementById('fecha_entrada').setAttribute('min', fechaHoy);
+            document.getElementById('fecha_salida').setAttribute('min', fechaHoy);
             
             document.getElementById('addReservationModal').style.display = 'flex';
         }

@@ -14,12 +14,14 @@ $action = isset($_POST['action']) ? $_POST['action'] : (isset($_GET['action']) ?
 
 // Función para obtener todas las habitaciones
 function obtenerHabitaciones($conn, $filtroEstado = '', $filtroTipo = '') {
+    $today = date('Y-m-d');
+    
     $sql = "SELECT h.*, 
             (SELECT COUNT(*) 
              FROM reserva r 
              WHERE r.numero_habitacion = h.numero_habitacion 
              AND r.estado = 'confirmada' 
-             AND CURDATE() BETWEEN r.fecha_entrada AND r.fecha_salida
+             AND ? BETWEEN r.fecha_entrada AND r.fecha_salida
             ) as esta_ocupada
             FROM habitacion h WHERE 1=1";
     
@@ -31,7 +33,9 @@ function obtenerHabitaciones($conn, $filtroEstado = '', $filtroTipo = '') {
     $stmt = $conn->prepare($sql);
     
     if (!empty($filtroTipo) && $filtroTipo != 'todos') {
-        $stmt->bind_param("s", $filtroTipo);
+        $stmt->bind_param("ss", $today, $filtroTipo);
+    } else {
+        $stmt->bind_param("s", $today);
     }
     
     $stmt->execute();
@@ -39,7 +43,7 @@ function obtenerHabitaciones($conn, $filtroEstado = '', $filtroTipo = '') {
     
     $habitaciones = [];
     while ($row = $result->fetch_assoc()) {
-        // Determinar el estado real basado en las reservas
+        // CORRECCIÓN: Determinar el estado real basado en las reservas
         if ($row['esta_ocupada'] > 0) {
             $row['estado'] = 'ocupada';
         } else {
@@ -128,22 +132,24 @@ function eliminarHabitacion($conn, $numero) {
     }
 }
 
-// Función para cambiar el estado de una habitación (solo si existe el campo)
+// CORRECCIÓN: Función mejorada para cambiar el estado de una habitación
 function cambiarEstadoHabitacion($conn, $numero, $nuevoEstado) {
+    $today = date('Y-m-d');
+    
     // Verificar si hay una reserva activa en esta habitación
     $sql = "SELECT COUNT(*) as count 
             FROM reserva 
             WHERE numero_habitacion = ? 
             AND estado = 'confirmada' 
-            AND CURDATE() BETWEEN fecha_entrada AND fecha_salida";
+            AND ? BETWEEN fecha_entrada AND fecha_salida";
     $stmt = $conn->prepare($sql);
-    $stmt->bind_param("i", $numero);
+    $stmt->bind_param("is", $numero, $today);
     $stmt->execute();
     $result = $stmt->get_result();
     $row = $result->fetch_assoc();
     
-    if ($row['count'] > 0 && $nuevoEstado === 'disponible') {
-        return ['success' => false, 'message' => 'No se puede marcar como disponible. Hay una reserva activa en esta habitación.'];
+    if ($row['count'] > 0) {
+        return ['success' => false, 'message' => 'No se puede cambiar el estado. Hay una reserva activa en esta habitación. Por favor, cancele primero la reserva.'];
     }
     
     // Verificar si la columna 'estado' existe en la tabla
@@ -164,17 +170,34 @@ function cambiarEstadoHabitacion($conn, $numero, $nuevoEstado) {
     }
 }
 
-// Función para obtener una habitación por número
+// CORRECCIÓN: Función mejorada para obtener una habitación con su estado real
 function obtenerHabitacionPorNumero($conn, $numero) {
-    $sql = "SELECT * FROM habitacion WHERE numero_habitacion = ?";
+    $today = date('Y-m-d');
+    
+    $sql = "SELECT h.*, 
+            (SELECT COUNT(*) 
+             FROM reserva r 
+             WHERE r.numero_habitacion = h.numero_habitacion 
+             AND r.estado = 'confirmada' 
+             AND ? BETWEEN r.fecha_entrada AND r.fecha_salida
+            ) as esta_ocupada
+            FROM habitacion h 
+            WHERE h.numero_habitacion = ?";
+    
     $stmt = $conn->prepare($sql);
-    $stmt->bind_param("i", $numero);
+    $stmt->bind_param("si", $today, $numero);
     $stmt->execute();
     $result = $stmt->get_result();
     
     if ($row = $result->fetch_assoc()) {
-        // Agregar estado por defecto si no existe
-        $row['estado'] = isset($row['estado']) ? $row['estado'] : 'disponible';
+        // Determinar el estado real basado en reservas
+        if ($row['esta_ocupada'] > 0) {
+            $row['estado'] = 'ocupada';
+        } else {
+            $row['estado'] = isset($row['estado']) ? $row['estado'] : 'disponible';
+        }
+        unset($row['esta_ocupada']);
+        
         return ['success' => true, 'data' => $row];
     } else {
         return ['success' => false, 'message' => 'Habitación no encontrada'];

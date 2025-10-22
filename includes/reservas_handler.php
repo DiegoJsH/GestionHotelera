@@ -259,23 +259,23 @@ function obtenerHabitacionesDisponibles($conn, $fecha_entrada, $fecha_salida, $i
             WHERE h.numero_habitacion NOT IN (
                 SELECT r.numero_habitacion 
                 FROM reserva r 
-                WHERE r.estado != 'cancelada'
-                AND (
-                    (r.fecha_entrada <= ? AND r.fecha_salida >= ?) OR
-                    (r.fecha_entrada <= ? AND r.fecha_salida >= ?) OR
-                    (r.fecha_entrada >= ? AND r.fecha_salida <= ?)
-                )";
+                WHERE r.estado != 'cancelada'";
     
     if ($id_reserva !== null) {
         $sql .= " AND r.id_reserva != ?";
     }
     
-    $sql .= ") ORDER BY h.numero_habitacion";
+    $sql .= " AND (
+                    (r.fecha_entrada <= ? AND r.fecha_salida >= ?) OR
+                    (r.fecha_entrada <= ? AND r.fecha_salida >= ?) OR
+                    (r.fecha_entrada >= ? AND r.fecha_salida <= ?)
+                )
+            ) ORDER BY h.numero_habitacion";
     
     $stmt = $conn->prepare($sql);
     
     if ($id_reserva !== null) {
-        $stmt->bind_param("sssssi", $fecha_entrada, $fecha_entrada, $fecha_salida, $fecha_salida, $fecha_entrada, $fecha_salida, $id_reserva);
+        $stmt->bind_param("issssss", $id_reserva, $fecha_entrada, $fecha_entrada, $fecha_salida, $fecha_salida, $fecha_entrada, $fecha_salida);
     } else {
         $stmt->bind_param("ssssss", $fecha_entrada, $fecha_entrada, $fecha_salida, $fecha_salida, $fecha_entrada, $fecha_salida);
     }

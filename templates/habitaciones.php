@@ -4,50 +4,6 @@ if (!isset($_SESSION['admin_id'])) {
     header("Location: ../login.php");
     exit;
 }
-
-include "../includes/db_connection.php";
-
-// Obtener todas las habitaciones
-$sql = "SELECT * FROM habitacion ORDER BY numero_habitacion ASC";
-$result = $conn->query($sql);
-$habitaciones = [];
-if ($result && $result->num_rows > 0) {
-    while($row = $result->fetch_assoc()) {
-        // Agregar estado por defecto si no existe
-        if (!isset($row['estado'])) {
-            $row['estado'] = 'disponible';
-        }
-        $habitaciones[] = $row;
-    }
-}
-
-// Función para obtener la clase CSS según el estado
-function getEstadoClass($estado) {
-    switch(strtolower($estado)) {
-        case 'disponible':
-            return 'available';
-        case 'ocupada':
-            return 'occupied';
-        case 'mantenimiento':
-            return 'maintenance';
-        default:
-            return 'available';
-    }
-}
-
-// Función para obtener el texto del estado
-function getEstadoTexto($estado) {
-    switch(strtolower($estado)) {
-        case 'disponible':
-            return 'Disponible';
-        case 'ocupada':
-            return 'Ocupada';
-        case 'mantenimiento':
-            return 'Mantenimiento';
-        default:
-            return ucfirst($estado);
-    }
-}
 ?>
 
 <!DOCTYPE html>
@@ -85,63 +41,7 @@ function getEstadoTexto($estado) {
                 </div>
 
                 <div class="rooms-grid" id="roomsGrid">
-                    <?php if (empty($habitaciones)): ?>
-                        <div class="no-data">
-                            <p>No hay habitaciones registradas. ¡Agrega la primera!</p>
-                        </div>
-                    <?php else: ?>
-                        <?php foreach ($habitaciones as $habitacion): 
-                            $estado = isset($habitacion['estado']) ? $habitacion['estado'] : 'disponible';
-                        ?>
-                            <div class="room-card <?php echo getEstadoClass($estado); ?>" 
-                                 data-estado="<?php echo strtolower($estado); ?>"
-                                 data-tipo="<?php echo htmlspecialchars($habitacion['tipo']); ?>">
-                                <div class="room-header">
-                                    <h3>Habitación <?php echo htmlspecialchars($habitacion['numero_habitacion']); ?></h3>
-                                    <span class="room-status"><?php echo getEstadoTexto($estado); ?></span>
-                                </div>
-                                <div class="room-info">
-                                    <p><strong>Tipo:</strong> <?php echo htmlspecialchars($habitacion['tipo']); ?></p>
-                                    <p><strong>Precio:</strong> $<?php echo number_format($habitacion['precio_por_noche'], 2); ?>/noche</p>
-                                    <p><strong>Capacidad:</strong> <?php echo $habitacion['capacidad']; ?> 
-                                        <?php echo $habitacion['capacidad'] == 1 ? 'persona' : 'personas'; ?></p>
-                                    <p><strong>Registrada:</strong> <?php echo date('d/m/Y', strtotime($habitacion['fecha_hora_registro'])); ?></p>
-                                </div>
-                                <div class="room-actions">
-                                    <?php 
-                                    $estado_actual = isset($habitacion['estado']) ? strtolower($habitacion['estado']) : 'disponible';
-                                    $num_hab = $habitacion['numero_habitacion'];
-                                    
-                                    if ($estado_actual == 'disponible'): 
-                                    ?>
-                                        <button class="btn btn-small btn-success" 
-                                                onclick="cambiarEstado(<?php echo $num_hab; ?>, 'ocupada')">
-                                            Marcar Ocupada
-                                        </button>
-                                    <?php elseif ($estado_actual == 'ocupada'): ?>
-                                        <button class="btn btn-small btn-warning" 
-                                                onclick="cambiarEstado(<?php echo $num_hab; ?>, 'disponible')">
-                                            Liberar
-                                        </button>
-                                    <?php elseif ($estado_actual == 'mantenimiento'): ?>
-                                        <button class="btn btn-small btn-success" 
-                                                onclick="cambiarEstado(<?php echo $num_hab; ?>, 'disponible')">
-                                            Marcar Lista
-                                        </button>
-                                    <?php endif; ?>
-                                    
-                                    <button class="btn btn-small btn-secondary" 
-                                            onclick="openEditModal(<?php echo $num_hab; ?>)">
-                                        Editar
-                                    </button>
-                                    <button class="btn btn-small btn-danger" 
-                                            onclick="eliminarHabitacion(<?php echo $num_hab; ?>)">
-                                        Eliminar
-                                    </button>
-                                </div>
-                            </div>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
+                    <div class="no-data">Cargando habitaciones...</div>
                 </div>
             </div>
         </main>
@@ -202,25 +102,138 @@ function getEstadoTexto($estado) {
     </div>
 
     <script>
+        let habitacionesData = [];
+        
+        // Cargar habitaciones al iniciar
+        document.addEventListener('DOMContentLoaded', function() {
+            cargarHabitaciones();
+        });
+        
+        // Cargar todas las habitaciones
+        function cargarHabitaciones() {
+            fetch('../includes/habitaciones_handler.php?action=listar')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        habitacionesData = data.data;
+                        mostrarHabitaciones(habitacionesData);
+                    } else {
+                        console.error('Error al cargar habitaciones:', data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    document.getElementById('roomsGrid').innerHTML = 
+                        '<div class="no-data">Error al cargar las habitaciones</div>';
+                });
+        }
+        
+        // Mostrar habitaciones en el grid
+        function mostrarHabitaciones(habitaciones) {
+            const grid = document.getElementById('roomsGrid');
+            
+            if (habitaciones.length === 0) {
+                grid.innerHTML = '<div class="no-data"><p>No hay habitaciones registradas. ¡Agrega la primera!</p></div>';
+                return;
+            }
+            
+            grid.innerHTML = '';
+            habitaciones.forEach(habitacion => {
+                const estadoClass = getEstadoClass(habitacion.estado);
+                const estadoTexto = getEstadoTexto(habitacion.estado);
+                const fechaRegistro = new Date(habitacion.fecha_hora_registro).toLocaleDateString('es-ES');
+                
+                const card = document.createElement('div');
+                card.className = `room-card ${estadoClass}`;
+                card.setAttribute('data-estado', habitacion.estado.toLowerCase());
+                card.setAttribute('data-tipo', habitacion.tipo);
+                
+                card.innerHTML = `
+                    <div class="room-header">
+                        <h3>Habitación ${habitacion.numero_habitacion}</h3>
+                        <span class="room-status">${estadoTexto}</span>
+                    </div>
+                    <div class="room-info">
+                        <p><strong>Tipo:</strong> ${habitacion.tipo}</p>
+                        <p><strong>Precio:</strong> \$${parseFloat(habitacion.precio_por_noche).toFixed(2)}/noche</p>
+                        <p><strong>Capacidad:</strong> ${habitacion.capacidad} ${habitacion.capacidad == 1 ? 'persona' : 'personas'}</p>
+                        <p><strong>Registrada:</strong> ${fechaRegistro}</p>
+                    </div>
+                    <div class="room-actions">
+                        ${generarBotonesEstado(habitacion)}
+                        <button class="btn btn-small btn-secondary" onclick="openEditModal(${habitacion.numero_habitacion})">
+                            Editar
+                        </button>
+                        <button class="btn btn-small btn-danger" onclick="eliminarHabitacion(${habitacion.numero_habitacion})">
+                            Eliminar
+                        </button>
+                    </div>
+                `;
+                
+                grid.appendChild(card);
+            });
+        }
+        
+        // Generar botones según el estado
+        function generarBotonesEstado(habitacion) {
+            const estado = habitacion.estado.toLowerCase();
+            
+            if (estado === 'disponible') {
+                return `<button class="btn btn-small btn-success" onclick="cambiarEstado(${habitacion.numero_habitacion}, 'ocupada')">
+                    Marcar Ocupada
+                </button>`;
+            } else if (estado === 'ocupada') {
+                return `<button class="btn btn-small btn-warning" onclick="cambiarEstado(${habitacion.numero_habitacion}, 'disponible')">
+                    Liberar
+                </button>`;
+            } else if (estado === 'mantenimiento') {
+                return `<button class="btn btn-small btn-success" onclick="cambiarEstado(${habitacion.numero_habitacion}, 'disponible')">
+                    Marcar Lista
+                </button>`;
+            }
+            return '';
+        }
+        
+        // Obtener clase CSS según estado
+        function getEstadoClass(estado) {
+            switch(estado.toLowerCase()) {
+                case 'disponible': return 'available';
+                case 'ocupada': return 'occupied';
+                case 'mantenimiento': return 'maintenance';
+                default: return 'available';
+            }
+        }
+        
+        // Obtener texto del estado
+        function getEstadoTexto(estado) {
+            switch(estado.toLowerCase()) {
+                case 'disponible': return 'Disponible';
+                case 'ocupada': return 'Ocupada';
+                case 'mantenimiento': return 'Mantenimiento';
+                default: return estado.charAt(0).toUpperCase() + estado.slice(1);
+            }
+        }
+        
         // Filtrar habitaciones por estado y tipo
         function filtrarHabitaciones() {
             const filtroEstado = document.getElementById('filtroEstado').value;
             const filtroTipo = document.getElementById('filtroTipo').value;
-            const cards = document.querySelectorAll('.room-card');
             
-            cards.forEach(card => {
-                const estado = card.getAttribute('data-estado');
-                const tipo = card.getAttribute('data-tipo');
-                
-                const matchEstado = filtroEstado === 'todas' || estado === filtroEstado;
-                const matchTipo = filtroTipo === 'todos' || tipo === filtroTipo;
-                
-                if (matchEstado && matchTipo) {
-                    card.style.display = 'block';
-                } else {
-                    card.style.display = 'none';
-                }
-            });
+            let habitacionesFiltradas = habitacionesData;
+            
+            if (filtroEstado !== 'todas') {
+                habitacionesFiltradas = habitacionesFiltradas.filter(h => 
+                    h.estado.toLowerCase() === filtroEstado.toLowerCase()
+                );
+            }
+            
+            if (filtroTipo !== 'todos') {
+                habitacionesFiltradas = habitacionesFiltradas.filter(h => 
+                    h.tipo === filtroTipo
+                );
+            }
+            
+            mostrarHabitaciones(habitacionesFiltradas);
         }
         
         // Abrir modal para agregar
@@ -280,7 +293,8 @@ function getEstadoTexto($estado) {
             .then(data => {
                 if (data.success) {
                     alert(data.message);
-                    location.reload();
+                    closeRoomModal();
+                    cargarHabitaciones(); // Recargar habitaciones
                 } else {
                     alert('Error: ' + data.message);
                 }
@@ -293,7 +307,8 @@ function getEstadoTexto($estado) {
         
         // Cambiar estado de habitación
         function cambiarEstado(numero, nuevoEstado) {
-            if (confirm(`¿Está seguro de cambiar el estado de la habitación a "${nuevoEstado}"?`)) {
+            const textoEstado = getEstadoTexto(nuevoEstado);
+            if (confirm(`¿Está seguro de cambiar el estado de la habitación a "${textoEstado}"?`)) {
                 const formData = new FormData();
                 formData.append('action', 'cambiar_estado');
                 formData.append('numero_habitacion', numero);
@@ -307,7 +322,7 @@ function getEstadoTexto($estado) {
                 .then(data => {
                     if (data.success) {
                         alert(data.message);
-                        location.reload();
+                        cargarHabitaciones(); // Recargar habitaciones
                     } else {
                         alert('Error: ' + data.message);
                     }
@@ -334,7 +349,7 @@ function getEstadoTexto($estado) {
                 .then(data => {
                     if (data.success) {
                         alert(data.message);
-                        location.reload();
+                        cargarHabitaciones(); // Recargar habitaciones
                     } else {
                         alert('Error: ' + data.message);
                     }

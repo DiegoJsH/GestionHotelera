@@ -14,17 +14,20 @@ $action = isset($_POST['action']) ? $_POST['action'] : (isset($_GET['action']) ?
 
 // Función para obtener todas las habitaciones
 function obtenerHabitaciones($conn, $filtroEstado = '', $filtroTipo = '') {
-    $sql = "SELECT * FROM habitacion WHERE 1=1";
+    $sql = "SELECT h.*, 
+            (SELECT COUNT(*) 
+             FROM reserva r 
+             WHERE r.numero_habitacion = h.numero_habitacion 
+             AND r.estado = 'confirmada' 
+             AND CURDATE() BETWEEN r.fecha_entrada AND r.fecha_salida
+            ) as esta_ocupada
+            FROM habitacion h WHERE 1=1";
     
     if (!empty($filtroTipo) && $filtroTipo != 'todos') {
-        $sql .= " AND tipo = ?";
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("s", $filtroTipo);
-    } else {
-        $stmt = $conn->prepare($sql);
+        $sql .= " AND h.tipo = ?";
     }
     
-    $sql .= " ORDER BY numero_habitacion ASC";
+    $sql .= " ORDER BY h.numero_habitacion ASC";
     $stmt = $conn->prepare($sql);
     
     if (!empty($filtroTipo) && $filtroTipo != 'todos') {
@@ -36,9 +39,23 @@ function obtenerHabitaciones($conn, $filtroEstado = '', $filtroTipo = '') {
     
     $habitaciones = [];
     while ($row = $result->fetch_assoc()) {
-        // Agregar estado 'disponible' por defecto si no existe
-        $row['estado'] = isset($row['estado']) ? $row['estado'] : 'disponible';
+        // Determinar el estado real basado en las reservas
+        if ($row['esta_ocupada'] > 0) {
+            $row['estado'] = 'ocupada';
+        } else {
+            // Verificar si hay columna estado en la tabla
+            $row['estado'] = isset($row['estado']) && !empty($row['estado']) ? $row['estado'] : 'disponible';
+        }
+        unset($row['esta_ocupada']); // Remover campo auxiliar
         $habitaciones[] = $row;
+    }
+    
+    // Aplicar filtro de estado si existe
+    if (!empty($filtroEstado) && $filtroEstado != 'todas') {
+        $habitaciones = array_filter($habitaciones, function($h) use ($filtroEstado) {
+            return $h['estado'] === $filtroEstado;
+        });
+        $habitaciones = array_values($habitaciones); // Reindexar array
     }
     
     return $habitaciones;
@@ -113,6 +130,22 @@ function eliminarHabitacion($conn, $numero) {
 
 // Función para cambiar el estado de una habitación (solo si existe el campo)
 function cambiarEstadoHabitacion($conn, $numero, $nuevoEstado) {
+    // Verificar si hay una reserva activa en esta habitación
+    $sql = "SELECT COUNT(*) as count 
+            FROM reserva 
+            WHERE numero_habitacion = ? 
+            AND estado = 'confirmada' 
+            AND CURDATE() BETWEEN fecha_entrada AND fecha_salida";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("i", $numero);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $row = $result->fetch_assoc();
+    
+    if ($row['count'] > 0 && $nuevoEstado === 'disponible') {
+        return ['success' => false, 'message' => 'No se puede marcar como disponible. Hay una reserva activa en esta habitación.'];
+    }
+    
     // Verificar si la columna 'estado' existe en la tabla
     $checkColumn = $conn->query("SHOW COLUMNS FROM habitacion LIKE 'estado'");
     

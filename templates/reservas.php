@@ -239,7 +239,7 @@ if (!isset($_SESSION['admin_id'])) {
                     <td>${formatearFecha(reserva.fecha_salida)}</td>
                     <td>${reserva.dias}</td>
                     <td><span class="status ${reserva.estado}">${capitalizar(reserva.estado)}</span></td>
-                    <td>$${reserva.total.toFixed(2)}</td>
+                    <td>\$${reserva.total.toFixed(2)}</td>
                     <td>
                         <button class="btn btn-small btn-primary" onclick="verDetalles(${reserva.id_reserva})">Ver</button>
                         ${reserva.estado !== 'cancelada' ? `
@@ -291,7 +291,8 @@ if (!isset($_SESSION['admin_id'])) {
         
         // Cargar lista de huéspedes
         function cargarHuespedes() {
-            fetch('../includes/reservas_handler.php?action=obtener_huespedes')
+            console.log('Cargando lista de huéspedes...');
+            return fetch('../includes/reservas_handler.php?action=obtener_huespedes')
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
@@ -303,9 +304,16 @@ if (!isset($_SESSION['admin_id'])) {
                             option.textContent = `${huesped.nombre} ${huesped.apellido}`;
                             select.appendChild(option);
                         });
+                        console.log(`${data.data.length} huéspedes cargados correctamente`);
+                        return true;
                     }
+                    console.error('Error al cargar huéspedes desde el servidor');
+                    return false;
                 })
-                .catch(error => console.error('Error:', error));
+                .catch(error => {
+                    console.error('Error al cargar huéspedes:', error);
+                    return false;
+                });
         }
         
         // Cargar habitaciones disponibles según fechas
@@ -315,13 +323,14 @@ if (!isset($_SESSION['admin_id'])) {
             const idReserva = document.getElementById('id_reserva').value;
             
             if (!fechaEntrada || !fechaSalida) {
-                return;
+                console.log('Faltan fechas para cargar habitaciones');
+                return Promise.resolve(false);
             }
             
             if (new Date(fechaSalida) <= new Date(fechaEntrada)) {
                 alert('La fecha de salida debe ser posterior a la fecha de entrada');
                 document.getElementById('fecha_salida').value = '';
-                return;
+                return Promise.resolve(false);
             }
             
             let url = `../includes/reservas_handler.php?action=obtener_habitaciones_disponibles&fecha_entrada=${fechaEntrada}&fecha_salida=${fechaSalida}`;
@@ -329,7 +338,9 @@ if (!isset($_SESSION['admin_id'])) {
                 url += `&id_reserva=${idReserva}`;
             }
             
-            fetch(url)
+            console.log('Cargando habitaciones disponibles...', { fechaEntrada, fechaSalida, idReserva });
+            
+            return fetch(url)
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
@@ -340,17 +351,26 @@ if (!isset($_SESSION['admin_id'])) {
                         if (data.data.length === 0) {
                             select.innerHTML = '<option value="">No hay habitaciones disponibles</option>';
                             select.disabled = true;
+                            console.warn('No hay habitaciones disponibles');
+                            return false;
                         } else {
                             data.data.forEach(habitacion => {
                                 const option = document.createElement('option');
                                 option.value = habitacion.numero_habitacion;
-                                option.textContent = `Habitación ${habitacion.numero_habitacion} - ${habitacion.tipo} ($${habitacion.precio_por_noche}/noche)`;
+                                option.textContent = `Habitación ${habitacion.numero_habitacion} - ${habitacion.tipo} (\$${habitacion.precio_por_noche}/noche)`;
                                 select.appendChild(option);
                             });
+                            console.log(`${data.data.length} habitaciones cargadas`);
+                            return true;
                         }
                     }
+                    console.error('Error en respuesta del servidor');
+                    return false;
                 })
-                .catch(error => console.error('Error:', error));
+                .catch(error => {
+                    console.error('Error al cargar habitaciones:', error);
+                    return false;
+                });
         }
         
         // Abrir modal para agregar
@@ -362,6 +382,9 @@ if (!isset($_SESSION['admin_id'])) {
             document.getElementById('estadoGroup').style.display = 'none';
             document.getElementById('numero_habitacion').disabled = true;
             document.getElementById('numero_habitacion').innerHTML = '<option value="">Primero seleccione las fechas</option>';
+            
+            // Cargar huéspedes cada vez que se abre el modal
+            cargarHuespedes();
             
             // Establecer fecha mínima como hoy
             const hoy = new Date().toISOString().split('T')[0];
@@ -377,33 +400,66 @@ if (!isset($_SESSION['admin_id'])) {
             document.getElementById('formAction').value = 'actualizar';
             document.getElementById('estadoGroup').style.display = 'block';
             
-            fetch(`../includes/reservas_handler.php?action=obtener&id=${id}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        const reserva = data.data;
-                        document.getElementById('id_reserva').value = reserva.id_reserva;
-                        document.getElementById('id_huesped').value = reserva.id_huesped;
-                        document.getElementById('fecha_entrada').value = reserva.fecha_entrada;
-                        document.getElementById('fecha_salida').value = reserva.fecha_salida;
-                        document.getElementById('observaciones').value = reserva.observaciones || '';
-                        document.getElementById('estado').value = reserva.estado;
-                        
-                        // Cargar habitaciones disponibles y luego seleccionar la actual
-                        cargarHabitacionesDisponibles();
-                        setTimeout(() => {
-                            document.getElementById('numero_habitacion').value = reserva.numero_habitacion;
-                        }, 500);
-                        
-                        document.getElementById('addReservationModal').style.display = 'flex';
-                    } else {
-                        alert('Error al cargar los datos: ' + data.message);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    alert('Error al cargar los datos de la reserva');
-                });
+            // Primero cargar los huéspedes, luego los datos de la reserva
+            cargarHuespedes().then(() => {
+                fetch(`../includes/reservas_handler.php?action=obtener&id=${id}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            const reserva = data.data;
+                            
+                            // Llenar todos los campos primero
+                            document.getElementById('id_reserva').value = reserva.id_reserva;
+                            document.getElementById('id_huesped').value = reserva.id_huesped;
+                            document.getElementById('observaciones').value = reserva.observaciones || '';
+                            document.getElementById('estado').value = reserva.estado;
+                            
+                            // Llenar las fechas ANTES de cargar habitaciones
+                            document.getElementById('fecha_entrada').value = reserva.fecha_entrada;
+                            document.getElementById('fecha_salida').value = reserva.fecha_salida;
+                            
+                            // Ahora sí, cargar habitaciones con las fechas ya establecidas
+                            cargarHabitacionesDisponibles().then((success) => {
+                                if (success) {
+                                    // Usar requestAnimationFrame para asegurar que el DOM esté actualizado
+                                    requestAnimationFrame(() => {
+                                        const selectHabitacion = document.getElementById('numero_habitacion');
+                                        selectHabitacion.value = reserva.numero_habitacion;
+                                        
+                                        // Verificar si se seleccionó correctamente
+                                        if (selectHabitacion.value !== String(reserva.numero_habitacion)) {
+                                            console.warn('Reintentando seleccionar habitación:', reserva.numero_habitacion);
+                                            // Intentar de nuevo con un pequeño delay
+                                            setTimeout(() => {
+                                                selectHabitacion.value = reserva.numero_habitacion;
+                                                if (selectHabitacion.value !== String(reserva.numero_habitacion)) {
+                                                    console.error('No se pudo seleccionar la habitación después de reintentar');
+                                                } else {
+                                                    console.log('Habitación seleccionada correctamente en segundo intento');
+                                                }
+                                            }, 200);
+                                        } else {
+                                            console.log('Habitación seleccionada correctamente:', reserva.numero_habitacion);
+                                        }
+                                    });
+                                } else {
+                                    console.error('No se pudieron cargar las habitaciones disponibles');
+                                }
+                            });
+                            
+                            document.getElementById('addReservationModal').style.display = 'flex';
+                        } else {
+                            alert('Error al cargar los datos: ' + data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('Error al cargar los datos de la reserva');
+                    });
+            }).catch(error => {
+                console.error('Error al cargar huéspedes:', error);
+                alert('Error al cargar la lista de huéspedes');
+            });
         }
         
         // Cerrar modal

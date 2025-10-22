@@ -41,13 +41,13 @@ function obtenerIngresosPorMes($conn, $fecha_inicio, $fecha_actual) {
                 SUM(DATEDIFF(r.fecha_salida, r.fecha_entrada) * h.precio_por_noche) as total
             FROM reserva r
             INNER JOIN habitacion h ON r.numero_habitacion = h.numero_habitacion
-            WHERE r.fecha_entrada BETWEEN ? AND ?
+            WHERE (r.fecha_entrada BETWEEN ? AND ? OR r.fecha_entrada >= ?)
             AND r.estado != 'cancelada'
             GROUP BY DATE_FORMAT(r.fecha_entrada, '%Y-%m')
             ORDER BY mes ASC";
     
     $stmt = $conn->prepare($sql);
-    $stmt->bind_param("ss", $fecha_inicio, $fecha_actual);
+    $stmt->bind_param("sss", $fecha_inicio, $fecha_actual, $fecha_actual);
     $stmt->execute();
     $result = $stmt->get_result();
     
@@ -92,40 +92,44 @@ function obtenerIngresosPorMes($conn, $fecha_inicio, $fecha_actual) {
 
 // Función para obtener estadísticas generales
 function obtenerEstadisticasGenerales($conn, $fecha_inicio, $fecha_actual) {
-    // Total de reservas
-    $sql = "SELECT COUNT(*) as count FROM reserva WHERE fecha_entrada BETWEEN ? AND ?";
+    // Total de reservas (incluyendo futuras si están confirmadas)
+    $sql = "SELECT COUNT(*) as count FROM reserva 
+            WHERE (fecha_entrada BETWEEN ? AND ? OR fecha_entrada >= ?)";
     $stmt = $conn->prepare($sql);
-    $stmt->bind_param("ss", $fecha_inicio, $fecha_actual);
+    $stmt->bind_param("sss", $fecha_inicio, $fecha_actual, $fecha_actual);
     $stmt->execute();
     $result = $stmt->get_result();
     $row = $result->fetch_assoc();
     $total_reservas = intval($row['count']);
     
     // Huéspedes únicos
-    $sql = "SELECT COUNT(DISTINCT id_huesped) as count FROM reserva WHERE fecha_entrada BETWEEN ? AND ?";
+    $sql = "SELECT COUNT(DISTINCT id_huesped) as count FROM reserva 
+            WHERE (fecha_entrada BETWEEN ? AND ? OR fecha_entrada >= ?)";
     $stmt = $conn->prepare($sql);
-    $stmt->bind_param("ss", $fecha_inicio, $fecha_actual);
+    $stmt->bind_param("sss", $fecha_inicio, $fecha_actual, $fecha_actual);
     $stmt->execute();
     $result = $stmt->get_result();
     $row = $result->fetch_assoc();
     $huespedes_unicos = intval($row['count']);
     
-    // Promedio de estancia
+    // Promedio de estancia (solo reservas no canceladas)
     $sql = "SELECT AVG(DATEDIFF(fecha_salida, fecha_entrada)) as promedio 
             FROM reserva 
-            WHERE fecha_entrada BETWEEN ? AND ?
+            WHERE (fecha_entrada BETWEEN ? AND ? OR fecha_entrada >= ?)
             AND estado != 'cancelada'";
     $stmt = $conn->prepare($sql);
-    $stmt->bind_param("ss", $fecha_inicio, $fecha_actual);
+    $stmt->bind_param("sss", $fecha_inicio, $fecha_actual, $fecha_actual);
     $stmt->execute();
     $result = $stmt->get_result();
     $row = $result->fetch_assoc();
     $promedio_estancia = $row['promedio'] ? floatval($row['promedio']) : 0;
     
     // Tasa de cancelación
-    $sql = "SELECT COUNT(*) as count FROM reserva WHERE fecha_entrada BETWEEN ? AND ? AND estado = 'cancelada'";
+    $sql = "SELECT COUNT(*) as count FROM reserva 
+            WHERE (fecha_entrada BETWEEN ? AND ? OR fecha_entrada >= ?) 
+            AND estado = 'cancelada'";
     $stmt = $conn->prepare($sql);
-    $stmt->bind_param("ss", $fecha_inicio, $fecha_actual);
+    $stmt->bind_param("sss", $fecha_inicio, $fecha_actual, $fecha_actual);
     $stmt->execute();
     $result = $stmt->get_result();
     $row = $result->fetch_assoc();
@@ -137,10 +141,10 @@ function obtenerEstadisticasGenerales($conn, $fecha_inicio, $fecha_actual) {
     $sql = "SELECT AVG(h.precio_por_noche) as promedio 
             FROM reserva r
             INNER JOIN habitacion h ON r.numero_habitacion = h.numero_habitacion
-            WHERE r.fecha_entrada BETWEEN ? AND ?
+            WHERE (r.fecha_entrada BETWEEN ? AND ? OR r.fecha_entrada >= ?)
             AND r.estado != 'cancelada'";
     $stmt = $conn->prepare($sql);
-    $stmt->bind_param("ss", $fecha_inicio, $fecha_actual);
+    $stmt->bind_param("sss", $fecha_inicio, $fecha_actual, $fecha_actual);
     $stmt->execute();
     $result = $stmt->get_result();
     $row = $result->fetch_assoc();

@@ -321,7 +321,11 @@ body {
   color: #2c3e50;
 }
 
-
+/*
+.activity-list {
+  space-y: 15px;
+}
+*/
 
 .activity-item {
   display: flex;

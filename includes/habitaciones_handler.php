@@ -66,16 +66,17 @@ function obtenerHabitaciones($conn, $filtroEstado = '', $filtroTipo = '') {
 }
 
 // Función para agregar una habitación
-function agregarHabitacion($conn, $datos) {
-    $sql = "INSERT INTO habitacion (numero_habitacion, tipo, precio_por_noche, capacidad) 
-            VALUES (?, ?, ?, ?)";
+function agregarHabitacion($conn, $datos, $nombreImagen = 'hb_sinfoto.webp') {
+    $sql = "INSERT INTO habitacion (numero_habitacion, tipo, precio_por_noche, capacidad, imagen) 
+            VALUES (?, ?, ?, ?, ?)";
     
     $stmt = $conn->prepare($sql);
-    $stmt->bind_param("isdi", 
+    $stmt->bind_param("isdis", 
         $datos['numero_habitacion'],
         $datos['tipo'],
         $datos['precio_por_noche'],
-        $datos['capacidad']
+        $datos['capacidad'],
+        $nombreImagen
     );
     
     if ($stmt->execute()) {
@@ -86,19 +87,33 @@ function agregarHabitacion($conn, $datos) {
 }
 
 // Función para actualizar una habitación
-function actualizarHabitacion($conn, $numero, $datos) {
-    $sql = "UPDATE habitacion 
-            SET tipo = ?, precio_por_noche = ?, capacidad = ?, estado = ?
-            WHERE numero_habitacion = ?";
-    
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("sdisi", 
-        $datos['tipo'],
-        $datos['precio_por_noche'],
-        $datos['capacidad'],
-        $datos['estado'],
-        $numero
-    );
+function actualizarHabitacion($conn, $numero, $datos, $nombreImagen = null) {
+    if ($nombreImagen !== null) {
+        $sql = "UPDATE habitacion 
+                SET tipo = ?, precio_por_noche = ?, capacidad = ?, estado = ?, imagen = ?
+                WHERE numero_habitacion = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("sdissi", 
+            $datos['tipo'],
+            $datos['precio_por_noche'],
+            $datos['capacidad'],
+            $datos['estado'],
+            $nombreImagen,
+            $numero
+        );
+    } else {
+        $sql = "UPDATE habitacion 
+                SET tipo = ?, precio_por_noche = ?, capacidad = ?, estado = ?
+                WHERE numero_habitacion = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("sdisi", 
+            $datos['tipo'],
+            $datos['precio_por_noche'],
+            $datos['capacidad'],
+            $datos['estado'],
+            $numero
+        );
+    }
     
     if ($stmt->execute()) {
         return ['success' => true, 'message' => 'Habitación actualizada exitosamente'];
@@ -204,6 +219,48 @@ function obtenerHabitacionPorNumero($conn, $numero) {
     }
 }
 
+// Función para procesar upload de imagen
+function procesarUploadImagen() {
+    if (!isset($_FILES['imagen']) || $_FILES['imagen']['error'] === UPLOAD_ERR_NO_FILE) {
+        return null; // No se subió imagen
+    }
+    
+    $archivo = $_FILES['imagen'];
+    
+    // Verificar errores
+    if ($archivo['error'] !== UPLOAD_ERR_OK) {
+        return ['error' => 'Error al subir el archivo'];
+    }
+    
+    // Validar tamaño (máx 2MB)
+    if ($archivo['size'] > 2 * 1024 * 1024) {
+        return ['error' => 'La imagen es muy grande. Máximo 2MB'];
+    }
+    
+    // Validar tipo
+    $tiposPermitidos = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+    $tipoMime = finfo_file($finfo, $archivo['tmp_name']);
+    finfo_close($finfo);
+    
+    if (!in_array($tipoMime, $tiposPermitidos)) {
+        return ['error' => 'Formato no válido. Use JPG, PNG o WebP'];
+    }
+    
+    // Usar el nombre original del archivo
+    $nombreArchivo = basename($archivo['name']);
+    
+    // Ruta donde se guardará
+    $rutaDestino = '../assets/img/habitaciones/' . $nombreArchivo;
+    
+    // Mover archivo
+    if (move_uploaded_file($archivo['tmp_name'], $rutaDestino)) {
+        return $nombreArchivo;
+    } else {
+        return ['error' => 'Error al guardar la imagen'];
+    }
+}
+
 // Procesar la acción solicitada
 header('Content-Type: application/json');
 
@@ -222,7 +279,15 @@ switch ($action) {
             'precio_por_noche' => $_POST['precio_por_noche'],
             'capacidad' => $_POST['capacidad']
         ];
-        $resultado = agregarHabitacion($conn, $datos);
+        
+        // Procesar imagen si se subió
+        $nombreImagen = procesarUploadImagen();
+        if (is_array($nombreImagen) && isset($nombreImagen['error'])) {
+            echo json_encode(['success' => false, 'message' => $nombreImagen['error']]);
+            break;
+        }
+        
+        $resultado = agregarHabitacion($conn, $datos, $nombreImagen);
         echo json_encode($resultado);
         break;
         
@@ -234,7 +299,15 @@ switch ($action) {
             'capacidad' => $_POST['capacidad'],
             'estado' => isset($_POST['estado']) ? $_POST['estado'] : 'disponible'
         ];
-        $resultado = actualizarHabitacion($conn, $numero, $datos);
+        
+        // Procesar imagen si se subió
+        $nombreImagen = procesarUploadImagen();
+        if (is_array($nombreImagen) && isset($nombreImagen['error'])) {
+            echo json_encode(['success' => false, 'message' => $nombreImagen['error']]);
+            break;
+        }
+        
+        $resultado = actualizarHabitacion($conn, $numero, $datos, $nombreImagen);
         echo json_encode($resultado);
         break;
         

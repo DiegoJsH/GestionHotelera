@@ -84,6 +84,13 @@ if (!isset($_SESSION['admin_id'])) {
                     <input type="number" id="capacidad" name="capacidad" required min="1" max="10">
                 </div>
                 
+                <div class="form-group">
+                    <label>Imagen de la Habitación</label>
+                    <input type="file" id="imagen" name="imagen" accept="image/jpeg,image/jpg,image/png,image/webp">
+                    <small style="color: #666; font-size: 0.85em;">Formatos: JPG, PNG, WebP (máx. 2MB)</small>
+                    <div id="imagenPreview" style="margin-top: 10px;"></div>
+                </div>
+                
                 <div class="form-group" id="estadoGroup" style="display:none;">
                     <label>Estado</label>
                     <select id="estado" name="estado">
@@ -98,6 +105,19 @@ if (!isset($_SESSION['admin_id'])) {
                     <button type="submit" class="btn btn-primary">Guardar</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Modal para ver foto de habitación -->
+    <div id="fotoModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="fotoModalTitle">Foto de la Habitación</h2>
+                <span class="close" onclick="closeFotoModal()">&times;</span>
+            </div>
+            <div class="modal-body" style="text-align: center; padding: 20px;">
+                <img id="fotoHabitacion" src="" alt="Foto de habitación" style="max-width: 100%; max-height: 500px; border-radius: 8px;">
+            </div>
         </div>
     </div>
 
@@ -160,6 +180,9 @@ if (!isset($_SESSION['admin_id'])) {
                         <p><strong>Registrada:</strong> ${fechaRegistro}</p>
                     </div>
                     <div class="room-actions">
+                        <button class="btn btn-small btn-info" onclick="verFoto('${habitacion.imagen || 'hb_sinfoto.webp'}', ${habitacion.numero_habitacion})">
+                            Ver Foto
+                        </button>
                         ${generarBotonesEstado(habitacion)}
                         <button class="btn btn-small btn-secondary" onclick="openEditModal(${habitacion.numero_habitacion})">
                             Editar
@@ -242,7 +265,55 @@ if (!isset($_SESSION['admin_id'])) {
             document.getElementById('formAction').value = 'agregar';
             document.getElementById('roomForm').reset();
             document.getElementById('estadoGroup').style.display = 'none';
+            document.getElementById('imagenPreview').innerHTML = '';
             document.getElementById('roomModal').style.display = 'flex';
+        }
+        
+        // Preview de imagen al seleccionar
+        document.getElementById('imagen').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            const preview = document.getElementById('imagenPreview');
+            
+            if (file) {
+                // Validar tamaño (máx 2MB)
+                if (file.size > 2 * 1024 * 1024) {
+                    alert('La imagen es muy grande. Máximo 2MB');
+                    e.target.value = '';
+                    preview.innerHTML = '';
+                    return;
+                }
+                
+                // Validar tipo
+                const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+                if (!validTypes.includes(file.type)) {
+                    alert('Formato no válido. Use JPG, PNG o WebP');
+                    e.target.value = '';
+                    preview.innerHTML = '';
+                    return;
+                }
+                
+                // Mostrar preview
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    preview.innerHTML = `<img src="${event.target.result}" style="max-width: 200px; max-height: 150px; border-radius: 4px;">`;
+                };
+                reader.readAsDataURL(file);
+            } else {
+                preview.innerHTML = '';
+            }
+        });
+        
+        // Ver foto de habitación
+        function verFoto(imagen, numero) {
+            const imgPath = `../assets/img/habitaciones/${imagen}`;
+            document.getElementById('fotoHabitacion').src = imgPath;
+            document.getElementById('fotoModalTitle').textContent = `Foto de la Habitación ${numero}`;
+            document.getElementById('fotoModal').style.display = 'flex';
+        }
+        
+        // Cerrar modal de foto
+        function closeFotoModal() {
+            document.getElementById('fotoModal').style.display = 'none';
         }
         
         // Abrir modal para editar

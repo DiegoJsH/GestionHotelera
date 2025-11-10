@@ -16,7 +16,14 @@ $action = isset($_POST['action']) ? $_POST['action'] : (isset($_GET['action']) ?
 function obtenerHabitaciones($conn, $filtroEstado = '', $filtroTipo = '') {
     $today = date('Y-m-d');
     
+    // Verificar si existe la columna piso
+    $columnExists = $conn->query("SHOW COLUMNS FROM habitacion LIKE 'piso'");
+    $hasPiso = ($columnExists && $columnExists->num_rows > 0);
+    
+    $pisoField = $hasPiso ? 'h.piso,' : '';
+    
     $sql = "SELECT h.*, 
+            $pisoField
             (SELECT COUNT(*) 
              FROM reserva r 
              WHERE r.numero_habitacion = h.numero_habitacion 
@@ -50,6 +57,12 @@ function obtenerHabitaciones($conn, $filtroEstado = '', $filtroTipo = '') {
             // Verificar si hay columna estado en la tabla
             $row['estado'] = isset($row['estado']) && !empty($row['estado']) ? $row['estado'] : 'disponible';
         }
+        
+        // Asegurar que siempre haya un valor de piso
+        if (!isset($row['piso']) || empty($row['piso'])) {
+            $row['piso'] = '1';
+        }
+        
         unset($row['esta_ocupada']); // Remover campo auxiliar
         $habitaciones[] = $row;
     }
@@ -67,17 +80,36 @@ function obtenerHabitaciones($conn, $filtroEstado = '', $filtroTipo = '') {
 
 // Función para agregar una habitación
 function agregarHabitacion($conn, $datos, $nombreImagen = 'hb_sinfoto.webp') {
-    $sql = "INSERT INTO habitacion (numero_habitacion, tipo, precio_por_noche, capacidad, imagen) 
-            VALUES (?, ?, ?, ?, ?)";
+    // Verificar si existe la columna piso
+    $columnExists = $conn->query("SHOW COLUMNS FROM habitacion LIKE 'piso'");
+    $hasPiso = ($columnExists && $columnExists->num_rows > 0);
     
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("isdis", 
-        $datos['numero_habitacion'],
-        $datos['tipo'],
-        $datos['precio_por_noche'],
-        $datos['capacidad'],
-        $nombreImagen
-    );
+    if ($hasPiso) {
+        $sql = "INSERT INTO habitacion (numero_habitacion, piso, tipo, precio_por_noche, capacidad, imagen) 
+                VALUES (?, ?, ?, ?, ?, ?)";
+        
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("issdis", 
+            $datos['numero_habitacion'],
+            $datos['piso'],
+            $datos['tipo'],
+            $datos['precio_por_noche'],
+            $datos['capacidad'],
+            $nombreImagen
+        );
+    } else {
+        $sql = "INSERT INTO habitacion (numero_habitacion, tipo, precio_por_noche, capacidad, imagen) 
+                VALUES (?, ?, ?, ?, ?)";
+        
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("isdis", 
+            $datos['numero_habitacion'],
+            $datos['tipo'],
+            $datos['precio_por_noche'],
+            $datos['capacidad'],
+            $nombreImagen
+        );
+    }
     
     if ($stmt->execute()) {
         return ['success' => true, 'message' => 'Habitación agregada exitosamente'];
@@ -88,31 +120,66 @@ function agregarHabitacion($conn, $datos, $nombreImagen = 'hb_sinfoto.webp') {
 
 // Función para actualizar una habitación
 function actualizarHabitacion($conn, $numero, $datos, $nombreImagen = null) {
-    if ($nombreImagen !== null) {
-        $sql = "UPDATE habitacion 
-                SET tipo = ?, precio_por_noche = ?, capacidad = ?, estado = ?, imagen = ?
-                WHERE numero_habitacion = ?";
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("sdissi", 
-            $datos['tipo'],
-            $datos['precio_por_noche'],
-            $datos['capacidad'],
-            $datos['estado'],
-            $nombreImagen,
-            $numero
-        );
+    // Verificar si existe la columna piso
+    $columnExists = $conn->query("SHOW COLUMNS FROM habitacion LIKE 'piso'");
+    $hasPiso = ($columnExists && $columnExists->num_rows > 0);
+    
+    if ($hasPiso) {
+        if ($nombreImagen !== null) {
+            $sql = "UPDATE habitacion 
+                    SET piso = ?, tipo = ?, precio_por_noche = ?, capacidad = ?, estado = ?, imagen = ?
+                    WHERE numero_habitacion = ?";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("ssdissi", 
+                $datos['piso'],
+                $datos['tipo'],
+                $datos['precio_por_noche'],
+                $datos['capacidad'],
+                $datos['estado'],
+                $nombreImagen,
+                $numero
+            );
+        } else {
+            $sql = "UPDATE habitacion 
+                    SET piso = ?, tipo = ?, precio_por_noche = ?, capacidad = ?, estado = ?
+                    WHERE numero_habitacion = ?";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("ssdisi", 
+                $datos['piso'],
+                $datos['tipo'],
+                $datos['precio_por_noche'],
+                $datos['capacidad'],
+                $datos['estado'],
+                $numero
+            );
+        }
     } else {
-        $sql = "UPDATE habitacion 
-                SET tipo = ?, precio_por_noche = ?, capacidad = ?, estado = ?
-                WHERE numero_habitacion = ?";
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("sdisi", 
-            $datos['tipo'],
-            $datos['precio_por_noche'],
-            $datos['capacidad'],
-            $datos['estado'],
-            $numero
-        );
+        if ($nombreImagen !== null) {
+            $sql = "UPDATE habitacion 
+                    SET tipo = ?, precio_por_noche = ?, capacidad = ?, estado = ?, imagen = ?
+                    WHERE numero_habitacion = ?";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("sdissi", 
+                $datos['tipo'],
+                $datos['precio_por_noche'],
+                $datos['capacidad'],
+                $datos['estado'],
+                $nombreImagen,
+                $numero
+            );
+        } else {
+            $sql = "UPDATE habitacion 
+                    SET tipo = ?, precio_por_noche = ?, capacidad = ?, estado = ?
+                    WHERE numero_habitacion = ?";
+            $stmt = $conn->prepare($sql);
+            $stmt->bind_param("sdisi", 
+                $datos['tipo'],
+                $datos['precio_por_noche'],
+                $datos['capacidad'],
+                $datos['estado'],
+                $numero
+            );
+        }
     }
     
     if ($stmt->execute()) {
@@ -189,7 +256,14 @@ function cambiarEstadoHabitacion($conn, $numero, $nuevoEstado) {
 function obtenerHabitacionPorNumero($conn, $numero) {
     $today = date('Y-m-d');
     
+    // Verificar si existe la columna piso
+    $columnExists = $conn->query("SHOW COLUMNS FROM habitacion LIKE 'piso'");
+    $hasPiso = ($columnExists && $columnExists->num_rows > 0);
+    
+    $pisoField = $hasPiso ? 'h.piso,' : '';
+    
     $sql = "SELECT h.*, 
+            $pisoField
             (SELECT COUNT(*) 
              FROM reserva r 
              WHERE r.numero_habitacion = h.numero_habitacion 
@@ -211,6 +285,12 @@ function obtenerHabitacionPorNumero($conn, $numero) {
         } else {
             $row['estado'] = isset($row['estado']) ? $row['estado'] : 'disponible';
         }
+        
+        // Asegurar que siempre haya un valor de piso
+        if (!isset($row['piso']) || empty($row['piso'])) {
+            $row['piso'] = '1';
+        }
+        
         unset($row['esta_ocupada']);
         
         return ['success' => true, 'data' => $row];
@@ -275,6 +355,7 @@ switch ($action) {
     case 'agregar':
         $datos = [
             'numero_habitacion' => $_POST['numero_habitacion'],
+            'piso' => isset($_POST['piso']) ? $_POST['piso'] : '1',
             'tipo' => $_POST['tipo'],
             'precio_por_noche' => $_POST['precio_por_noche'],
             'capacidad' => $_POST['capacidad']
@@ -294,6 +375,7 @@ switch ($action) {
     case 'actualizar':
         $numero = $_POST['numero_habitacion'];
         $datos = [
+            'piso' => isset($_POST['piso']) ? $_POST['piso'] : '1',
             'tipo' => $_POST['tipo'],
             'precio_por_noche' => $_POST['precio_por_noche'],
             'capacidad' => $_POST['capacidad'],

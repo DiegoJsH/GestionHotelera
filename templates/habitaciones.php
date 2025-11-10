@@ -20,7 +20,7 @@ if (!isset($_SESSION['admin_id'])) {
         <main class="main-content">
             <header class="top-bar">
                 <h1>Gestión de Habitaciones</h1>
-                <button class="btn btn-primary" onclick="openAddModal()">+ Nueva Habitación</button>
+                <button class="btn btn-primary" id="btnNuevaHabitacion" onclick="openAddModal()">+ Nueva Habitación</button>
             </header>
 
             <div class="content-area">
@@ -37,6 +37,12 @@ if (!isset($_SESSION['admin_id'])) {
                         <option value="Doble">Doble</option>
                         <option value="Suite">Suite</option>
                         <option value="Familiar">Familiar</option>
+                    </select>
+                    <select class="filter-select" id="filtroPiso" onchange="filtrarHabitaciones()">
+                        <option value="todos">Todos los pisos</option>
+                        <option value="1">Piso 1</option>
+                        <option value="2">Piso 2</option>
+                        <option value="3">Piso 3</option>
                     </select>
                 </div>
 
@@ -60,6 +66,16 @@ if (!isset($_SESSION['admin_id'])) {
                 <div class="form-group">
                     <label>Número de Habitación *</label>
                     <input type="number" id="numero_habitacion" name="numero_habitacion" required min="1">
+                </div>
+                
+                <div class="form-group">
+                    <label>Piso *</label>
+                    <select id="piso" name="piso" required>
+                        <option value="">Seleccione un piso</option>
+                        <option value="1">Piso 1</option>
+                        <option value="2">Piso 2</option>
+                        <option value="3">Piso 3</option>
+                    </select>
                 </div>
                 
                 <div class="form-group">
@@ -123,11 +139,32 @@ if (!isset($_SESSION['admin_id'])) {
 
     <script>
         let habitacionesData = [];
+        const LIMITE_HABITACIONES = 20;
         
         // Cargar habitaciones al iniciar
         document.addEventListener('DOMContentLoaded', function() {
             cargarHabitaciones();
         });
+        
+        // Función para verificar y actualizar el estado del botón
+        function actualizarEstadoBoton() {
+            const boton = document.getElementById('btnNuevaHabitacion');
+            const totalHabitaciones = habitacionesData.length;
+            
+            if (totalHabitaciones >= LIMITE_HABITACIONES) {
+                boton.disabled = true;
+                boton.style.backgroundColor = '#95a5a6';
+                boton.style.cursor = 'not-allowed';
+                boton.style.opacity = '0.6';
+                boton.title = `Límite máximo de ${LIMITE_HABITACIONES} habitaciones alcanzado`;
+            } else {
+                boton.disabled = false;
+                boton.style.backgroundColor = '';
+                boton.style.cursor = 'pointer';
+                boton.style.opacity = '1';
+                boton.title = '';
+            }
+        }
         
         // Cargar todas las habitaciones
         function cargarHabitaciones() {
@@ -137,6 +174,7 @@ if (!isset($_SESSION['admin_id'])) {
                     if (data.success) {
                         habitacionesData = data.data;
                         mostrarHabitaciones(habitacionesData);
+                        actualizarEstadoBoton();
                     } else {
                         console.error('Error al cargar habitaciones:', data.message);
                     }
@@ -167,6 +205,7 @@ if (!isset($_SESSION['admin_id'])) {
                 card.className = `room-card ${estadoClass}`;
                 card.setAttribute('data-estado', habitacion.estado.toLowerCase());
                 card.setAttribute('data-tipo', habitacion.tipo);
+                card.setAttribute('data-piso', habitacion.piso || '1');
                 
                 card.innerHTML = `
                     <div class="room-header">
@@ -174,6 +213,7 @@ if (!isset($_SESSION['admin_id'])) {
                         <span class="room-status">${estadoTexto}</span>
                     </div>
                     <div class="room-info">
+                        <p><strong>Piso:</strong> ${habitacion.piso || '1'}</p>
                         <p><strong>Tipo:</strong> ${habitacion.tipo}</p>
                         <p><strong>Precio:</strong> \$${parseFloat(habitacion.precio_por_noche).toFixed(2)}/noche</p>
                         <p><strong>Capacidad:</strong> ${habitacion.capacidad} ${habitacion.capacidad == 1 ? 'persona' : 'personas'}</p>
@@ -237,10 +277,11 @@ if (!isset($_SESSION['admin_id'])) {
             }
         }
         
-        // Filtrar habitaciones por estado y tipo
+        // Filtrar habitaciones por estado, tipo y piso
         function filtrarHabitaciones() {
             const filtroEstado = document.getElementById('filtroEstado').value;
             const filtroTipo = document.getElementById('filtroTipo').value;
+            const filtroPiso = document.getElementById('filtroPiso').value;
             
             let habitacionesFiltradas = habitacionesData;
             
@@ -256,11 +297,23 @@ if (!isset($_SESSION['admin_id'])) {
                 );
             }
             
+            if (filtroPiso !== 'todos') {
+                habitacionesFiltradas = habitacionesFiltradas.filter(h => 
+                    String(h.piso) === filtroPiso || (!h.piso && filtroPiso === '1')
+                );
+            }
+            
             mostrarHabitaciones(habitacionesFiltradas);
         }
         
         // Abrir modal para agregar
         function openAddModal() {
+            // Verificar límite antes de abrir el modal
+            if (habitacionesData.length >= LIMITE_HABITACIONES) {
+                alert(`No se pueden agregar más habitaciones. El límite máximo es de ${LIMITE_HABITACIONES} habitaciones.`);
+                return;
+            }
+            
             document.getElementById('modalTitle').textContent = 'Nueva Habitación';
             document.getElementById('formAction').value = 'agregar';
             document.getElementById('roomForm').reset();
@@ -329,6 +382,7 @@ if (!isset($_SESSION['admin_id'])) {
                     if (data.success) {
                         const habitacion = data.data;
                         document.getElementById('numero_habitacion').value = habitacion.numero_habitacion;
+                        document.getElementById('piso').value = habitacion.piso || '1';
                         document.getElementById('tipo').value = habitacion.tipo;
                         document.getElementById('precio_por_noche').value = habitacion.precio_por_noche;
                         document.getElementById('capacidad').value = habitacion.capacidad;
@@ -420,7 +474,7 @@ if (!isset($_SESSION['admin_id'])) {
                 .then(data => {
                     if (data.success) {
                         alert(data.message);
-                        cargarHabitaciones(); // Recargar habitaciones
+                        cargarHabitaciones(); // Recargar habitaciones y actualizar botón
                     } else {
                         alert('Error: ' + data.message);
                     }

@@ -118,7 +118,7 @@ function getIniciales($nombre, $apellido) {
                 <div class="form-row">
                     <div class="form-group">
                         <label>Tipo de Documento *</label>
-                        <select id="tipo_documento" name="tipo_documento" required>
+                        <select id="tipo_documento" name="tipo_documento" required onchange="configurarValidacionDocumento()">
                             <option value="">Seleccione un tipo</option>
                             <option value="DNI">DNI</option>
                             <option value="Pasaporte">Pasaporte</option>
@@ -129,6 +129,9 @@ function getIniciales($nombre, $apellido) {
                     <div class="form-group">
                         <label>Número de Documento *</label>
                         <input type="text" id="documento" name="documento" required>
+                        <small id="documentoHelp" style="color: #666; font-size: 0.85em; display: block; margin-top: 5px;">
+                            Seleccione el tipo de documento
+                        </small>
                     </div>
                 </div>
                 
@@ -139,7 +142,10 @@ function getIniciales($nombre, $apellido) {
                     </div>
                     <div class="form-group">
                         <label>Teléfono *</label>
-                        <input type="tel" id="telefono" name="telefono" required>
+                        <input type="text" id="telefono" name="telefono" required maxlength="9">
+                        <small style="color: #666; font-size: 0.85em; display: block; margin-top: 5px;">
+                            Debe tener exactamente 9 dígitos
+                        </small>
                     </div>
                 </div>
                 
@@ -157,6 +163,47 @@ function getIniciales($nombre, $apellido) {
     </div>
 
     <script>
+        // Configurar validación del documento según el tipo seleccionado
+        function configurarValidacionDocumento() {
+            const tipoDocumento = document.getElementById('tipo_documento').value;
+            const inputDocumento = document.getElementById('documento');
+            const helpText = document.getElementById('documentoHelp');
+            
+            // Limpiar el input
+            inputDocumento.value = '';
+            
+            if (tipoDocumento === 'DNI') {
+                inputDocumento.setAttribute('maxlength', '8');
+                inputDocumento.setAttribute('minlength', '8');
+                inputDocumento.setAttribute('pattern', '[0-9]{8}');
+                helpText.textContent = 'DNI: Debe tener exactamente 8 dígitos';
+            } else if (tipoDocumento === 'Pasaporte' || tipoDocumento === 'Cédula' || tipoDocumento === 'RUT') {
+                inputDocumento.setAttribute('maxlength', '20');
+                inputDocumento.setAttribute('minlength', '8');
+                inputDocumento.setAttribute('pattern', '[0-9]{8,20}');
+                helpText.textContent = `${tipoDocumento}: Debe tener entre 8 y 20 dígitos`;
+            } else {
+                inputDocumento.removeAttribute('maxlength');
+                inputDocumento.removeAttribute('minlength');
+                inputDocumento.removeAttribute('pattern');
+                helpText.textContent = 'Seleccione el tipo de documento';
+            }
+        }
+        
+        // Validar que solo se ingresen números en documento
+        document.addEventListener('DOMContentLoaded', function() {
+            const inputDocumento = document.getElementById('documento');
+            inputDocumento.addEventListener('input', function(e) {
+                this.value = this.value.replace(/[^0-9]/g, '');
+            });
+            
+            // Validar que solo se ingresen números en teléfono
+            const inputTelefono = document.getElementById('telefono');
+            inputTelefono.addEventListener('input', function(e) {
+                this.value = this.value.replace(/[^0-9]/g, '');
+            });
+        });
+        
         // Buscar huéspedes en tiempo real
         function buscarHuespedes() {
             const busqueda = document.getElementById('busquedaInput').value.toLowerCase();
@@ -184,6 +231,14 @@ function getIniciales($nombre, $apellido) {
             document.getElementById('formAction').value = 'agregar';
             document.getElementById('guestForm').reset();
             document.getElementById('id_huesped').value = '';
+            
+            // Resetear validaciones
+            const inputDocumento = document.getElementById('documento');
+            inputDocumento.removeAttribute('maxlength');
+            inputDocumento.removeAttribute('minlength');
+            inputDocumento.removeAttribute('pattern');
+            document.getElementById('documentoHelp').textContent = 'Seleccione el tipo de documento';
+            
             document.getElementById('guestModal').style.display = 'flex';
         }
         
@@ -202,6 +257,10 @@ function getIniciales($nombre, $apellido) {
                         document.getElementById('nombre').value = huesped.nombre;
                         document.getElementById('apellido').value = huesped.apellido;
                         document.getElementById('tipo_documento').value = huesped.tipo_documento;
+                        
+                        // Configurar validación antes de llenar el documento
+                        configurarValidacionDocumento();
+                        
                         document.getElementById('documento').value = huesped.documento;
                         document.getElementById('email').value = huesped.email;
                         document.getElementById('telefono').value = huesped.telefono;
@@ -226,6 +285,30 @@ function getIniciales($nombre, $apellido) {
         // Guardar huésped (agregar o actualizar)
         function guardarHuesped(event) {
             event.preventDefault();
+            
+            // Validaciones adicionales antes de enviar
+            const tipoDocumento = document.getElementById('tipo_documento').value;
+            const documento = document.getElementById('documento').value;
+            const telefono = document.getElementById('telefono').value;
+            
+            // Validar documento
+            if (tipoDocumento === 'DNI') {
+                if (documento.length !== 8 || !/^[0-9]{8}$/.test(documento)) {
+                    alert('El DNI debe tener exactamente 8 dígitos numéricos');
+                    return;
+                }
+            } else if (tipoDocumento === 'Pasaporte' || tipoDocumento === 'Cédula' || tipoDocumento === 'RUT') {
+                if (documento.length < 8 || documento.length > 20 || !/^[0-9]{8,20}$/.test(documento)) {
+                    alert(`El ${tipoDocumento} debe tener entre 8 y 20 dígitos numéricos`);
+                    return;
+                }
+            }
+            
+            // Validar teléfono
+            if (telefono.length !== 9 || !/^[0-9]{9}$/.test(telefono)) {
+                alert('El teléfono debe tener exactamente 9 dígitos numéricos');
+                return;
+            }
             
             const formData = new FormData(event.target);
             

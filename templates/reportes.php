@@ -48,6 +48,30 @@ if (!isset($_SESSION['admin_id'])) {
                         </div>
                     </div>
                 </div>
+
+                <div class="section">
+                    <h2>Habitaciones Más Reservadas</h2>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Habitación</th>
+                                    <th>Piso</th>
+                                    <th>Tipo</th>
+                                    <th>Reservas</th>
+                                    <th>Precio/Noche</th>
+                                    <th>Ingresos Generados</th>
+                                </tr>
+                            </thead>
+                            <tbody id="habitacionesPopularesTable">
+                                <tr>
+                                    <td colspan="7" class="no-data">Cargando datos...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </main>
     </div>
@@ -71,6 +95,7 @@ if (!isset($_SESSION['admin_id'])) {
                         reportesData = data;
                         mostrarIngresos(data.ingresos);
                         mostrarEstadisticas(data.estadisticas);
+                        mostrarHabitacionesPopulares(data.habitaciones_populares);
                     } else {
                         console.error('Error al cargar reportes:', data.message);
                     }
@@ -135,6 +160,31 @@ if (!isset($_SESSION['admin_id'])) {
                     <strong>$${estadisticas.ingreso_promedio_noche.toFixed(2)}</strong>
                 </div>
             `;
+        }
+        
+        // Mostrar habitaciones más reservadas
+        function mostrarHabitacionesPopulares(habitaciones) {
+            const tbody = document.getElementById('habitacionesPopularesTable');
+            
+            if (!habitaciones || habitaciones.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="no-data">No hay datos de reservas en este periodo</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = '';
+            habitaciones.forEach((hab, index) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${index + 1}</td>
+                    <td><strong>${hab.numero_habitacion}</strong></td>
+                    <td>Piso ${hab.piso}</td>
+                    <td>${hab.tipo}</td>
+                    <td><strong>${hab.total_reservas}</strong> reservas</td>
+                    <td>$${hab.precio_por_noche.toFixed(2)}</td>
+                    <td><strong style="color: #27ae60;">$${hab.ingresos_generados.toFixed(2)}</strong></td>
+                `;
+                tbody.appendChild(row);
+            });
         }
         
         // Exportar a PDF
@@ -207,6 +257,54 @@ if (!isset($_SESSION['admin_id'])) {
             doc.text(`Tasa de Cancelación: ${stats.tasa_cancelacion}%`, 30, y);
             y += 7;
             doc.text(`Ingreso Promedio por Noche: $${stats.ingreso_promedio_noche.toFixed(2)}`, 30, y);
+            
+            // Línea separadora
+            y += 10;
+            doc.line(20, y, 190, y);
+            
+            // Sección: Habitaciones Más Reservadas
+            y += 10;
+            doc.setFontSize(14);
+            doc.text('Habitaciones Más Reservadas', 20, y);
+            
+            y += 10;
+            doc.setFontSize(10);
+            
+            if (reportesData.habitaciones_populares && reportesData.habitaciones_populares.length > 0) {
+                // Encabezados
+                doc.setFont(undefined, 'bold');
+                doc.text('Hab', 25, y);
+                doc.text('Piso', 45, y);
+                doc.text('Tipo', 65, y);
+                doc.text('Reservas', 95, y);
+                doc.text('Ingresos', 135, y);
+                
+                y += 7;
+                doc.setFont(undefined, 'normal');
+                
+                // Máximo 10 habitaciones o las que haya
+                const maxHab = Math.min(reportesData.habitaciones_populares.length, 10);
+                
+                for (let i = 0; i < maxHab; i++) {
+                    const hab = reportesData.habitaciones_populares[i];
+                    
+                    // Si llegamos al final de la página, crear una nueva
+                    if (y > 270) {
+                        doc.addPage();
+                        y = 20;
+                    }
+                    
+                    doc.text(`${hab.numero_habitacion}`, 25, y);
+                    doc.text(`${hab.piso}`, 45, y);
+                    doc.text(`${hab.tipo}`, 65, y);
+                    doc.text(`${hab.total_reservas}`, 95, y);
+                    doc.text(`$${hab.ingresos_generados.toFixed(2)}`, 135, y);
+                    
+                    y += 7;
+                }
+            } else {
+                doc.text('No hay datos de habitaciones reservadas en este periodo', 30, y);
+            }
             
             // Pie de página
             doc.setFontSize(8);

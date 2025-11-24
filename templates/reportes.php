@@ -11,6 +11,7 @@ if (!isset($_SESSION['admin_id'])) {
 <head>
     <?php include "../includes/header.php" ?>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
 </head>
 <body>
     <div class="app-container">
@@ -48,7 +49,7 @@ if (!isset($_SESSION['admin_id'])) {
                         </div>
                     </div>
                 </div>
-
+                
                 <div class="section">
                     <h2>Habitaciones Más Reservadas</h2>
                     <div class="table-container">
@@ -72,17 +73,130 @@ if (!isset($_SESSION['admin_id'])) {
                         </table>
                     </div>
                 </div>
+
+                <!-- Sección de Gráfico de Barras -->
+                <div class="section">
+                    <h2>Tipo de Habitaciones Más Reservadas</h2>
+                    <div class="chart-card">
+                        <div class="chart-controls">
+                            <label for="periodoGrafico">Período:</label>
+                            <select id="periodoGrafico" class="filter-select">
+                                <option value="diario">Hoy</option>
+                                <option value="semanal">Esta Semana</option>
+                                <option value="mensual" selected>Este Mes</option>
+                                <option value="anual">Este Año</option>
+                            </select>
+                            
+                            <label for="tipoGrafico">Tipo:</label>
+                            <select id="tipoGrafico" class="filter-select">
+                                <option value="bar" selected>Barras</option>
+                                <option value="line">Líneas</option>
+                                <option value="pie">Circular</option>
+                                <option value="doughnut">Dona</option>
+                            </select>
+                        </div>
+                        <div class="chart-wrapper">
+                            <canvas id="graficoHabitaciones"></canvas>
+                        </div>
+                        <div class="chart-legend" id="chartLegend">
+                            <p class="no-data">Cargando datos del gráfico...</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </main>
     </div>
 
     <script>
         let reportesData = null;
+        let chartInstance = null;
         
         // Cargar reportes al iniciar
         document.addEventListener('DOMContentLoaded', function() {
             cargarReportes();
+            cargarGraficoHabitaciones();
+            
+            // Event listener para cambiar el período del gráfico
+            document.getElementById('periodoGrafico').addEventListener('change', function() {
+                cargarGraficoHabitaciones();
+            });
+            
+            // Event listener para cambiar el tipo de gráfico
+            document.getElementById('tipoGrafico').addEventListener('change', function() {
+                cargarGraficoHabitaciones();
+            });
         });
+        
+        // Cargar datos del gráfico de habitaciones
+        function cargarGraficoHabitaciones() {
+            const periodo = document.getElementById('periodoGrafico').value;
+            
+            fetch(`../includes/reportes_handler.php?accion=grafico&periodo_grafico=${periodo}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.datos.labels.length > 0) {
+                        renderizarGrafico(data.datos);
+                    } else {
+                        document.getElementById('chartLegend').innerHTML = '<p class="no-data">No hay datos</p>';
+                        if (chartInstance) chartInstance.destroy();
+                    }
+                });
+        }
+        
+        // Renderizar el gráfico con Chart.js
+        function renderizarGrafico(datos) {
+            const colores = ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#43e97b'];
+            const colors = datos.labels.map((_, i) => colores[i % colores.length]);
+            const tipoGrafico = document.getElementById('tipoGrafico').value;
+            
+            if (chartInstance) chartInstance.destroy();
+            
+            // Configuración específica según tipo de gráfico
+            const config = {
+                type: tipoGrafico,
+                data: {
+                    labels: datos.labels,
+                    datasets: [{
+                        label: 'Reservas',
+                        data: datos.valores,
+                        backgroundColor: colors,
+                        borderColor: tipoGrafico === 'line' ? colors : undefined,
+                        borderWidth: tipoGrafico === 'line' ? 2 : undefined,
+                        borderRadius: tipoGrafico === 'bar' ? 6 : undefined,
+                        tension: tipoGrafico === 'line' ? 0.4 : undefined
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { 
+                        legend: { 
+                            display: tipoGrafico === 'pie' || tipoGrafico === 'doughnut',
+                            position: 'bottom'
+                        } 
+                    }
+                }
+            };
+            
+            // Agregar escalas solo para gráficos de barras y líneas
+            if (tipoGrafico === 'bar' || tipoGrafico === 'line') {
+                config.options.scales = { 
+                    y: { beginAtZero: true, ticks: { stepSize: 1 } } 
+                };
+            }
+            
+            chartInstance = new Chart(document.getElementById('graficoHabitaciones'), config);
+            
+            // Generar leyenda
+            const total = datos.valores.reduce((a, b) => a + b, 0);
+            document.getElementById('chartLegend').innerHTML = datos.labels.map((label, i) => `
+                <div class="legend-item">
+                    <span class="legend-color" style="background: ${colors[i]}"></span>
+                    <span class="legend-text">${label}:</span>
+                    <span class="legend-value">${datos.valores[i]} (${((datos.valores[i]/total)*100).toFixed(1)}%)</span>
+                </div>
+            `).join('');
+        }
         
         // Cargar reportes según el periodo seleccionado
         function cargarReportes() {

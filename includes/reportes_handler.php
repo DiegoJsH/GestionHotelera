@@ -141,18 +141,53 @@ function obtenerHabitacionesMasReservadas($conn, $fecha_inicio, $fecha_actual) {
     return $habitaciones;
 }
 
+// Obtener reservas por tipo de habitación según período para el gráfico
+function obtenerReservasPorTipoHabitacion($conn, $periodo_grafico) {
+    $where = match($periodo_grafico) {
+        'diario' => "DATE(r.fecha_entrada) = CURDATE()",
+        'semanal' => "YEARWEEK(r.fecha_entrada, 1) = YEARWEEK(CURDATE(), 1)",
+        'anual' => "YEAR(r.fecha_entrada) = YEAR(CURDATE())",
+        default => "YEAR(r.fecha_entrada) = YEAR(CURDATE()) AND MONTH(r.fecha_entrada) = MONTH(CURDATE())"
+    };
+    
+    $sql = "SELECT h.tipo, COUNT(*) as total
+            FROM reserva r
+            INNER JOIN habitacion h ON r.numero_habitacion = h.numero_habitacion
+            WHERE $where AND r.estado != 'cancelada'
+            GROUP BY h.tipo
+            ORDER BY total DESC";
+    
+    $result = $conn->query($sql);
+    $labels = [];
+    $valores = [];
+    
+    while ($row = $result->fetch_assoc()) {
+        $labels[] = $row['tipo'];
+        $valores[] = (int)$row['total'];
+    }
+    
+    return ['labels' => $labels, 'valores' => $valores];
+}
+
 // Procesar solicitud
 header('Content-Type: application/json');
 
-try {
-    echo json_encode([
-        'success' => true,
-        'ingresos' => obtenerIngresosPorMes($conn, $fecha_inicio_str, $fecha_actual_str),
-        'estadisticas' => obtenerEstadisticasGenerales($conn, $fecha_inicio_str, $fecha_actual_str),
-        'habitaciones_populares' => obtenerHabitacionesMasReservadas($conn, $fecha_inicio_str, $fecha_actual_str)
-    ]);
-} catch (Exception $e) {
-    echo json_encode(['success' => false, 'message' => 'Error al generar reportes: ' . $e->getMessage()]);
+// Si se solicita datos del gráfico
+if (isset($_GET['accion']) && $_GET['accion'] === 'grafico') {
+    $datos = obtenerReservasPorTipoHabitacion($conn, $_GET['periodo_grafico'] ?? 'mensual');
+    echo json_encode(['success' => true, 'datos' => $datos]);
+} else {
+    // Respuesta normal de reportes
+    try {
+        echo json_encode([
+            'success' => true,
+            'ingresos' => obtenerIngresosPorMes($conn, $fecha_inicio_str, $fecha_actual_str),
+            'estadisticas' => obtenerEstadisticasGenerales($conn, $fecha_inicio_str, $fecha_actual_str),
+            'habitaciones_populares' => obtenerHabitacionesMasReservadas($conn, $fecha_inicio_str, $fecha_actual_str)
+        ]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'Error al generar reportes: ' . $e->getMessage()]);
+    }
 }
 
 $conn->close();

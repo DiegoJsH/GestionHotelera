@@ -50,6 +50,31 @@ if (!isset($_SESSION['admin_id'])) {
                     </div>
                 </div>
                 
+                <!-- NUEVA SECCIÓN: Ingresos por Día -->
+                <div class="section" style="margin-top: 30px;">
+                    <h2> Ingresos por Día</h2>
+                        
+                        
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Fecha</th>
+                                        <th>Día</th>
+                                        <th>Reservas</th>
+                                        <th>Ingresos</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="ingresosDiariosTable">
+                                    <tr>
+                                        <td colspan="5" class="no-data">Cargando datos...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    
+                </div>
+                
                 <div class="section">
                     <h2>Habitaciones Más Reservadas</h2>
                     <div class="table-container">
@@ -208,6 +233,7 @@ if (!isset($_SESSION['admin_id'])) {
                     if (data.success) {
                         reportesData = data;
                         mostrarIngresos(data.ingresos);
+                        mostrarIngresosDiarios(data.ingresos_diarios);
                         mostrarEstadisticas(data.estadisticas);
                         mostrarHabitacionesPopulares(data.habitaciones_populares);
                     } else {
@@ -246,6 +272,28 @@ if (!isset($_SESSION['admin_id'])) {
             });
             
             totalElement.textContent = `Total: $${ingresos.total_general.toFixed(2)}`;
+        }
+        
+        // NUEVA FUNCIÓN: Mostrar ingresos por día
+        function mostrarIngresosDiarios(ingresosDiarios) {
+            const tbody = document.getElementById('ingresosDiariosTable');
+            
+            
+            tbody.innerHTML = '';
+            ingresosDiarios.ingresos.forEach((dia) => {
+                const porcentaje = ingresosDiarios.total_periodo > 0 
+                    ? ((dia.total_ingresos / ingresosDiarios.total_periodo) * 100).toFixed(1)
+                    : 0;
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><strong>${dia.fecha_formateada}</strong></td>
+                    <td>${dia.dia_semana}</td>
+                    <td><span style="color: black; padding: 4px 10px; border-radius: 12px; font-weight: 600;">${dia.num_reservas}</span></td>
+                    <td><strong style="color: #27ae60; font-size: 15px;">$${dia.total_ingresos.toFixed(2)}</strong></td>
+                `;
+                tbody.appendChild(row);
+            });
         }
         
         // Mostrar estadísticas generales

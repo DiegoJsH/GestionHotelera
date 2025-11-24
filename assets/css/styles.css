@@ -165,6 +165,9 @@ body {
   justify-content: space-between;
   align-items: center;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  position: sticky;
+  z-index: 99;
+  top: 0;
 }
 
 .top-bar h1 {
@@ -313,6 +316,7 @@ body {
   padding: 25px;
   border-radius: 12px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  margin: 5px;
 }
 
 .section h2 {

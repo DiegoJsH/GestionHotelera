@@ -63,6 +63,60 @@ function obtenerIngresosPorMes($conn, $fecha_inicio, $fecha_actual) {
     return ['ingresos' => $ingresos, 'total_general' => $total_general];
 }
 
+// NUEVA FUNCIÓN: Obtener ingresos por día
+function obtenerIngresosPorDia($conn, $fecha_inicio, $fecha_actual) {
+    $sql = "SELECT 
+                DATE(r.fecha_entrada) as fecha,
+                COUNT(r.id_reserva) as num_reservas,
+                SUM(DATEDIFF(r.fecha_salida, r.fecha_entrada) * h.precio_por_noche) as total_ingresos
+            FROM reserva r
+            INNER JOIN habitacion h ON r.numero_habitacion = h.numero_habitacion
+            WHERE (r.fecha_entrada BETWEEN ? AND ? OR r.fecha_entrada >= ?)
+            AND r.estado != 'cancelada'
+            GROUP BY DATE(r.fecha_entrada)
+            ORDER BY DATE(r.fecha_entrada) DESC
+            LIMIT 30";
+    
+    $result = ejecutarConsultaPeriodo($conn, $sql, $fecha_inicio, $fecha_actual);
+    
+    $ingresos_diarios = [];
+    $total_periodo = 0;
+    $total_reservas = 0;
+    
+    while ($row = $result->fetch_assoc()) {
+        $ingresos = floatval($row['total_ingresos']);
+        $reservas = intval($row['num_reservas']);
+        
+        $ingresos_diarios[] = [
+            'fecha' => $row['fecha'],
+            'fecha_formateada' => date('d/m/Y', strtotime($row['fecha'])),
+            'dia_semana' => obtenerDiaSemana($row['fecha']),
+            'num_reservas' => $reservas,
+            'total_ingresos' => $ingresos
+        ];
+        
+        $total_periodo += $ingresos;
+        $total_reservas += $reservas;
+    }
+    
+    $promedio_diario = count($ingresos_diarios) > 0 ? $total_periodo / count($ingresos_diarios) : 0;
+    
+    return [
+        'ingresos' => $ingresos_diarios,
+        'total_periodo' => $total_periodo,
+        'total_reservas' => $total_reservas,
+        'promedio_diario' => $promedio_diario,
+        'dias_con_datos' => count($ingresos_diarios)
+    ];
+}
+
+// Función auxiliar para obtener día de la semana en español
+function obtenerDiaSemana($fecha) {
+    $dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    $fecha_obj = new DateTime($fecha);
+    return $dias[$fecha_obj->format('w')];
+}
+
 // Obtener estadísticas generales
 function obtenerEstadisticasGenerales($conn, $fecha_inicio, $fecha_actual) {
     $consultas = [
@@ -182,6 +236,7 @@ if (isset($_GET['accion']) && $_GET['accion'] === 'grafico') {
         echo json_encode([
             'success' => true,
             'ingresos' => obtenerIngresosPorMes($conn, $fecha_inicio_str, $fecha_actual_str),
+            'ingresos_diarios' => obtenerIngresosPorDia($conn, $fecha_inicio_str, $fecha_actual_str),
             'estadisticas' => obtenerEstadisticasGenerales($conn, $fecha_inicio_str, $fecha_actual_str),
             'habitaciones_populares' => obtenerHabitacionesMasReservadas($conn, $fecha_inicio_str, $fecha_actual_str)
         ]);

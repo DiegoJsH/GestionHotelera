@@ -14,14 +14,44 @@ $periodo = $_GET['periodo'] ?? 'mes';
 $fecha_actual = new DateTime();
 $fecha_inicio = clone $fecha_actual;
 
-$fecha_inicio->modify(match($periodo) {
-    'tres_meses' => '-3 months',
-    'año' => '-1 year',
-    default => '-1 month'
-});
+// Si se proporcionan fechas personalizadas en la solicitud, úsalas
+if (isset($_GET['fecha_inicio']) && isset($_GET['fecha_fin'])) {
+    // Validar formato básico YYYY-MM-DD
+    $fi = $_GET['fecha_inicio'];
+    $ff = $_GET['fecha_fin'];
+    // Intentar crear objetos DateTime para validar
+    try {
+        $objFi = new DateTime($fi);
+        $objFf = new DateTime($ff);
+        // Asegurar que inicio <= fin
+        if ($objFi > $objFf) {
+            // intercambiar si están al revés
+            $tmp = $objFi;
+            $objFi = $objFf;
+            $objFf = $tmp;
+        }
+        $fecha_inicio_str = $objFi->format('Y-m-d');
+        $fecha_actual_str = $objFf->format('Y-m-d');
+    } catch (Exception $e) {
+        // Si falla la validación, caer al comportamiento por periodo
+        $fecha_inicio->modify(match($periodo) {
+            'tres_meses' => '-3 months',
+            'año' => '-1 year',
+            default => '-1 month'
+        });
+        $fecha_inicio_str = $fecha_inicio->format('Y-m-d');
+        $fecha_actual_str = $fecha_actual->format('Y-m-d');
+    }
+} else {
+    $fecha_inicio->modify(match($periodo) {
+        'tres_meses' => '-3 months',
+        'año' => '-1 year',
+        default => '-1 month'
+    });
 
-$fecha_inicio_str = $fecha_inicio->format('Y-m-d');
-$fecha_actual_str = $fecha_actual->format('Y-m-d');
+    $fecha_inicio_str = $fecha_inicio->format('Y-m-d');
+    $fecha_actual_str = $fecha_actual->format('Y-m-d');
+}
 
 // Función helper para ejecutar consultas con periodo
 function ejecutarConsultaPeriodo($conn, $sql, $fecha_inicio, $fecha_actual) {

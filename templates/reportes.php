@@ -27,11 +27,18 @@ if (!isset($_SESSION['admin_id'])) {
                         <option value="mes">Último mes</option>
                         <option value="tres_meses">Últimos 3 meses</option>
                         <option value="año">Último año</option>
+                        <option value="personalizado">Personalizado</option>
                     </select>
                     <button class="btn btn-primary" onclick="exportarPDF()">Exportar PDF</button>
                 </div>
-            </header>
 
+                <div class="report-filters" id="personalizadoFilters" style="display:none; margin-top:10px;">
+                    <label style="margin-right:8px;">Rango personalizado:</label>
+                    <input type="date" id="reportFechaInicio" class="filter-input" onchange="cargarReportes()">
+                    <span style="margin:0 8px;">a</span>
+                    <input type="date" id="reportFechaFin" class="filter-input" onchange="cargarReportes()">
+                </div>
+            </header>
             <div class="content-area">
                 <div class="reports-grid">
                     <div class="report-card">
@@ -150,6 +157,27 @@ if (!isset($_SESSION['admin_id'])) {
             document.getElementById('tipoGrafico').addEventListener('change', function() {
                 cargarGraficoHabitaciones();
             });
+            
+            // Mostrar/ocultar filtros personalizados cuando se selecciona 'personalizado'
+            const periodoSelect = document.getElementById('periodoSelect');
+            const personalizadoFilters = document.getElementById('personalizadoFilters');
+            periodoSelect.addEventListener('change', function() {
+                if (this.value === 'personalizado') {
+                    personalizadoFilters.style.display = 'flex';
+                    // establecer min/max por defecto si están vacíos
+                    const hoy = new Date();
+                    hoy.setMinutes(hoy.getMinutes() - hoy.getTimezoneOffset());
+                    const fechaHoy = hoy.toISOString().split('T')[0];
+                    const inicio = document.getElementById('reportFechaInicio');
+                    const fin = document.getElementById('reportFechaFin');
+                    if (!inicio.value) inicio.value = fechaHoy;
+                    if (!fin.value) fin.value = fechaHoy;
+                } else {
+                    personalizadoFilters.style.display = 'none';
+                }
+                // recargar reportes al cambiar el periodo
+                cargarReportes();
+            });
         });
         
         // Cargar datos del gráfico de habitaciones
@@ -226,8 +254,22 @@ if (!isset($_SESSION['admin_id'])) {
         // Cargar reportes según el periodo seleccionado
         function cargarReportes() {
             const periodo = document.getElementById('periodoSelect').value;
-            
-            fetch(`../includes/reportes_handler.php?periodo=${periodo}`)
+            let url = `../includes/reportes_handler.php?periodo=${periodo}`;
+
+            // Si el usuario eligió un periodo personalizado, enviar fechas
+            if (periodo === 'personalizado') {
+                const fechaInicio = document.getElementById('reportFechaInicio').value;
+                const fechaFin = document.getElementById('reportFechaFin').value;
+                
+                if (new Date(fechaInicio) > new Date(fechaFin)) {
+                    alert('La fecha de inicio debe ser anterior o igual a la fecha de fin.');
+                    return;
+                }
+
+                url += `&fecha_inicio=${encodeURIComponent(fechaInicio)}&fecha_fin=${encodeURIComponent(fechaFin)}`;
+            }
+
+            fetch(url)
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {

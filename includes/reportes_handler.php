@@ -14,41 +14,16 @@ $periodo = $_GET['periodo'] ?? 'mes';
 $fecha_actual = new DateTime();
 $fecha_inicio = clone $fecha_actual;
 
-// Si se proporcionan fechas personalizadas en la solicitud, úsalas
-if (isset($_GET['fecha_inicio']) && isset($_GET['fecha_fin'])) {
-    // Validar formato básico YYYY-MM-DD
-    $fi = $_GET['fecha_inicio'];
-    $ff = $_GET['fecha_fin'];
-    // Intentar crear objetos DateTime para validar
-    try {
-        $objFi = new DateTime($fi);
-        $objFf = new DateTime($ff);
-        // Asegurar que inicio <= fin
-        if ($objFi > $objFf) {
-            // intercambiar si están al revés
-            $tmp = $objFi;
-            $objFi = $objFf;
-            $objFf = $tmp;
-        }
-        $fecha_inicio_str = $objFi->format('Y-m-d');
-        $fecha_actual_str = $objFf->format('Y-m-d');
-    } catch (Exception $e) {
-        // Si falla la validación, caer al comportamiento por periodo
-        $fecha_inicio->modify(match($periodo) {
-            'tres_meses' => '-3 months',
-            'año' => '-1 year',
-            default => '-1 month'
-        });
-        $fecha_inicio_str = $fecha_inicio->format('Y-m-d');
-        $fecha_actual_str = $fecha_actual->format('Y-m-d');
-    }
+// Calcular fechas según periodo o usar personalizadas
+if (isset($_GET['fecha_inicio'], $_GET['fecha_fin'])) {
+    $fecha_inicio_str = $_GET['fecha_inicio'];
+    $fecha_actual_str = $_GET['fecha_fin'];
 } else {
     $fecha_inicio->modify(match($periodo) {
         'tres_meses' => '-3 months',
         'año' => '-1 year',
         default => '-1 month'
     });
-
     $fecha_inicio_str = $fecha_inicio->format('Y-m-d');
     $fecha_actual_str = $fecha_actual->format('Y-m-d');
 }
@@ -56,19 +31,19 @@ if (isset($_GET['fecha_inicio']) && isset($_GET['fecha_fin'])) {
 // Función helper para ejecutar consultas con periodo
 function ejecutarConsultaPeriodo($conn, $sql, $fecha_inicio, $fecha_actual) {
     $stmt = $conn->prepare($sql);
-    $stmt->bind_param("sss", $fecha_inicio, $fecha_actual, $fecha_actual);
+    $stmt->bind_param("ss", $fecha_actual, $fecha_inicio);
     $stmt->execute();
     return $stmt->get_result();
 }
 
-// Obtener ingresos por mes - ACTUALIZADO para incluir finalizadas
+// Obtener ingresos por mes - ACTUALIZADO para usar fecha_entrada y fecha_salida
 function obtenerIngresosPorMes($conn, $fecha_inicio, $fecha_actual) {
     $sql = "SELECT 
                 DATE_FORMAT(r.fecha_entrada, '%M %Y') as mes_nombre,
                 SUM(DATEDIFF(r.fecha_salida, r.fecha_entrada) * h.precio_por_noche) as total
             FROM reserva r
             INNER JOIN habitacion h ON r.numero_habitacion = h.numero_habitacion
-            WHERE (r.fecha_entrada BETWEEN ? AND ? OR r.fecha_entrada >= ?)
+            WHERE (r.fecha_entrada <= ? AND r.fecha_salida >= ?)
             AND r.estado NOT IN ('cancelada')
             GROUP BY DATE_FORMAT(r.fecha_entrada, '%Y-%m')
             ORDER BY DATE_FORMAT(r.fecha_entrada, '%Y-%m') ASC";
@@ -93,7 +68,7 @@ function obtenerIngresosPorMes($conn, $fecha_inicio, $fecha_actual) {
     return ['ingresos' => $ingresos, 'total_general' => $total_general];
 }
 
-// Obtener ingresos por día - ACTUALIZADO para incluir finalizadas
+// Obtener ingresos por día - ACTUALIZADO para usar fecha_entrada y fecha_salida
 function obtenerIngresosPorDia($conn, $fecha_inicio, $fecha_actual) {
     $sql = "SELECT 
                 DATE(r.fecha_entrada) as fecha,
@@ -101,7 +76,7 @@ function obtenerIngresosPorDia($conn, $fecha_inicio, $fecha_actual) {
                 SUM(DATEDIFF(r.fecha_salida, r.fecha_entrada) * h.precio_por_noche) as total_ingresos
             FROM reserva r
             INNER JOIN habitacion h ON r.numero_habitacion = h.numero_habitacion
-            WHERE (r.fecha_entrada BETWEEN ? AND ? OR r.fecha_entrada >= ?)
+            WHERE (r.fecha_entrada <= ? AND r.fecha_salida >= ?)
             AND r.estado NOT IN ('cancelada')
             GROUP BY DATE(r.fecha_entrada)
             ORDER BY DATE(r.fecha_entrada) DESC
@@ -147,48 +122,38 @@ function obtenerDiaSemana($fecha) {
     return $dias[$fecha_obj->format('w')];
 }
 
-// Obtener estadísticas generales - ACTUALIZADO para incluir finalizadas
+// Obtener estadísticas generales con una sola query optimizada
 function obtenerEstadisticasGenerales($conn, $fecha_inicio, $fecha_actual) {
-    $consultas = [
-        'total_reservas' => "SELECT COUNT(*) as val FROM reserva 
-                            WHERE (fecha_entrada BETWEEN ? AND ? OR fecha_entrada >= ?)",
-        'huespedes_unicos' => "SELECT COUNT(DISTINCT id_huesped) as val FROM reserva 
-                              WHERE (fecha_entrada BETWEEN ? AND ? OR fecha_entrada >= ?)",
-        'promedio_estancia' => "SELECT AVG(DATEDIFF(fecha_salida, fecha_entrada)) as val 
-                               FROM reserva 
-                               WHERE (fecha_entrada BETWEEN ? AND ? OR fecha_entrada >= ?)
-                               AND estado NOT IN ('cancelada')",
-        'reservas_canceladas' => "SELECT COUNT(*) as val FROM reserva 
-                                 WHERE (fecha_entrada BETWEEN ? AND ? OR fecha_entrada >= ?) 
-                                 AND estado = 'cancelada'",
-        'ingreso_promedio_noche' => "SELECT AVG(h.precio_por_noche) as val 
-                                    FROM reserva r
-                                    INNER JOIN habitacion h ON r.numero_habitacion = h.numero_habitacion
-                                    WHERE (r.fecha_entrada BETWEEN ? AND ? OR r.fecha_entrada >= ?)
-                                    AND r.estado NOT IN ('cancelada')"
-    ];
+    $sql = "SELECT 
+                COUNT(*) as total_reservas,
+                COUNT(DISTINCT id_huesped) as huespedes_unicos,
+                AVG(CASE WHEN estado != 'cancelada' THEN DATEDIFF(fecha_salida, fecha_entrada) END) as promedio_estancia,
+                SUM(estado = 'cancelada') as reservas_canceladas,
+                (SELECT AVG(h.precio_por_noche) FROM reserva r2 
+                 INNER JOIN habitacion h ON r2.numero_habitacion = h.numero_habitacion 
+                 WHERE r2.fecha_entrada <= ? AND r2.fecha_salida >= ? AND r2.estado != 'cancelada') as ingreso_promedio_noche
+            FROM reserva 
+            WHERE fecha_entrada <= ? AND fecha_salida >= ?";
     
-    $stats = [];
-    foreach ($consultas as $key => $sql) {
-        $result = ejecutarConsultaPeriodo($conn, $sql, $fecha_inicio, $fecha_actual);
-        $row = $result->fetch_assoc();
-        $stats[$key] = $row['val'] ? floatval($row['val']) : 0;
-    }
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("ssss", $fecha_actual, $fecha_inicio, $fecha_actual, $fecha_inicio);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
     
-    $tasa_cancelacion = $stats['total_reservas'] > 0 
-        ? ($stats['reservas_canceladas'] / $stats['total_reservas']) * 100 
-        : 0;
+    $total = intval($row['total_reservas']);
+    $canceladas = intval($row['reservas_canceladas']);
+    $tasa_cancelacion = $total > 0 ? ($canceladas / $total) * 100 : 0;
     
     return [
-        'total_reservas' => intval($stats['total_reservas']),
-        'huespedes_unicos' => intval($stats['huespedes_unicos']),
-        'promedio_estancia' => round($stats['promedio_estancia'], 1),
+        'total_reservas' => $total,
+        'huespedes_unicos' => intval($row['huespedes_unicos']),
+        'promedio_estancia' => round($row['promedio_estancia'] ?? 0, 1),
         'tasa_cancelacion' => round($tasa_cancelacion, 1),
-        'ingreso_promedio_noche' => round($stats['ingreso_promedio_noche'], 2)
+        'ingreso_promedio_noche' => round($row['ingreso_promedio_noche'] ?? 0, 2)
     ];
 }
 
-// Obtener habitaciones más reservadas - ACTUALIZADO para incluir finalizadas
+// Obtener habitaciones más reservadas - ACTUALIZADO para usar fecha_entrada y fecha_salida
 function obtenerHabitacionesMasReservadas($conn, $fecha_inicio, $fecha_actual) {
     $hasPiso = $conn->query("SHOW COLUMNS FROM habitacion LIKE 'piso'")->num_rows > 0;
     $pisoField = $hasPiso ? 'h.piso,' : "'1' as piso,";
@@ -202,7 +167,7 @@ function obtenerHabitacionesMasReservadas($conn, $fecha_inicio, $fecha_actual) {
                 SUM(DATEDIFF(r.fecha_salida, r.fecha_entrada) * h.precio_por_noche) as ingresos_generados
             FROM habitacion h
             INNER JOIN reserva r ON h.numero_habitacion = r.numero_habitacion
-            WHERE (r.fecha_entrada BETWEEN ? AND ? OR r.fecha_entrada >= ?)
+            WHERE r.fecha_entrada <= ? AND r.fecha_salida >= ?
             AND r.estado NOT IN ('cancelada')
             GROUP BY h.numero_habitacion, h.tipo, h.precio_por_noche" . ($hasPiso ? ", h.piso" : "") . "
             ORDER BY total_reservas DESC
@@ -225,23 +190,21 @@ function obtenerHabitacionesMasReservadas($conn, $fecha_inicio, $fecha_actual) {
     return $habitaciones;
 }
 
-// Obtener reservas por tipo de habitación - ACTUALIZADO para incluir finalizadas
-function obtenerReservasPorTipoHabitacion($conn, $periodo_grafico) {
-    $where = match($periodo_grafico) {
-        'diario' => "DATE(r.fecha_entrada) = CURDATE()",
-        'semanal' => "YEARWEEK(r.fecha_entrada, 1) = YEARWEEK(CURDATE(), 1)",
-        'anual' => "YEAR(r.fecha_entrada) = YEAR(CURDATE())",
-        default => "YEAR(r.fecha_entrada) = YEAR(CURDATE()) AND MONTH(r.fecha_entrada) = MONTH(CURDATE())"
-    };
-    
+// Obtener reservas por tipo de habitación según período
+function obtenerReservasPorTipoHabitacion($conn, $fecha_inicio, $fecha_actual) {
     $sql = "SELECT h.tipo, COUNT(*) as total
             FROM reserva r
             INNER JOIN habitacion h ON r.numero_habitacion = h.numero_habitacion
-            WHERE $where AND r.estado NOT IN ('cancelada')
+            WHERE r.fecha_entrada <= ? AND r.fecha_salida >= ?
+            AND r.estado NOT IN ('cancelada')
             GROUP BY h.tipo
             ORDER BY total DESC";
     
-    $result = $conn->query($sql);
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("ss", $fecha_actual, $fecha_inicio);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
     $labels = [];
     $valores = [];
     
@@ -258,7 +221,7 @@ header('Content-Type: application/json');
 
 // Si se solicita datos del gráfico
 if (isset($_GET['accion']) && $_GET['accion'] === 'grafico') {
-    $datos = obtenerReservasPorTipoHabitacion($conn, $_GET['periodo_grafico'] ?? 'mensual');
+    $datos = obtenerReservasPorTipoHabitacion($conn, $fecha_inicio_str, $fecha_actual_str);
     echo json_encode(['success' => true, 'datos' => $datos]);
 } else {
     // Respuesta normal de reportes

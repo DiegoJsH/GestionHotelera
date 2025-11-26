@@ -23,7 +23,7 @@ if (!isset($_SESSION['admin_id'])) {
             <header class="top-bar">
                 <h1>Reportes y Estadísticas</h1>
                 <div class="report-filters">
-                    <select class="filter-select" id="periodoSelect" onchange="cargarReportes()">
+                    <select class="filter-select" id="periodoSelect">
                         <option value="mes">Último mes</option>
                         <option value="tres_meses">Últimos 3 meses</option>
                         <option value="año">Último año</option>
@@ -34,9 +34,9 @@ if (!isset($_SESSION['admin_id'])) {
 
                 <div class="report-filters" id="personalizadoFilters" style="display:none; margin-top:10px;">
                     <label style="margin-right:8px;">Rango personalizado:</label>
-                    <input type="date" id="reportFechaInicio" class="filter-input" onchange="cargarReportes()">
+                    <input type="date" id="reportFechaInicio" class="filter-input">
                     <span style="margin:0 8px;">a</span>
-                    <input type="date" id="reportFechaFin" class="filter-input" onchange="cargarReportes()">
+                    <input type="date" id="reportFechaFin" class="filter-input">
                 </div>
             </header>
             <div class="content-area">
@@ -111,15 +111,7 @@ if (!isset($_SESSION['admin_id'])) {
                     <h2>Tipo de Habitaciones Más Reservadas</h2>
                     <div class="chart-card">
                         <div class="chart-controls">
-                            <label for="periodoGrafico">Período:</label>
-                            <select id="periodoGrafico" class="filter-select">
-                                <option value="diario">Hoy</option>
-                                <option value="semanal">Esta Semana</option>
-                                <option value="mensual" selected>Este Mes</option>
-                                <option value="anual">Este Año</option>
-                            </select>
-                            
-                            <label for="tipoGrafico">Tipo:</label>
+                            <label for="tipoGrafico">Tipo de Gráfico:</label>
                             <select id="tipoGrafico" class="filter-select">
                                 <option value="bar" selected>Barras</option>
                                 <option value="line">Líneas</option>
@@ -146,12 +138,7 @@ if (!isset($_SESSION['admin_id'])) {
         // Cargar reportes al iniciar
         document.addEventListener('DOMContentLoaded', function() {
             cargarReportes();
-            cargarGraficoHabitaciones();
-            
-            // Event listener para cambiar el período del gráfico
-            document.getElementById('periodoGrafico').addEventListener('change', function() {
-                cargarGraficoHabitaciones();
-            });
+            cargarGraficoHabitaciones(); // Cargar el gráfico al inicio
             
             // Event listener para cambiar el tipo de gráfico
             document.getElementById('tipoGrafico').addEventListener('change', function() {
@@ -177,14 +164,32 @@ if (!isset($_SESSION['admin_id'])) {
                 }
                 // recargar reportes al cambiar el periodo
                 cargarReportes();
+                cargarGraficoHabitaciones();
             });
+            
+            // Event listeners para los inputs de fecha personalizada
+            const recargarDatos = () => {
+                if (periodoSelect.value === 'personalizado') {
+                    cargarReportes();
+                    cargarGraficoHabitaciones();
+                }
+            };
+            document.getElementById('reportFechaInicio').addEventListener('change', recargarDatos);
+            document.getElementById('reportFechaFin').addEventListener('change', recargarDatos);
         });
         
         // Cargar datos del gráfico de habitaciones
         function cargarGraficoHabitaciones() {
-            const periodo = document.getElementById('periodoGrafico').value;
+            const periodo = document.getElementById('periodoSelect').value;
+            const fechaInicio = document.getElementById('reportFechaInicio')?.value || '';
+            const fechaFin = document.getElementById('reportFechaFin')?.value || '';
             
-            fetch(`../includes/reportes_handler.php?accion=grafico&periodo_grafico=${periodo}`)
+            let url = `../includes/reportes_handler.php?accion=grafico&periodo=${periodo}`;
+            if (periodo === 'personalizado' && fechaInicio && fechaFin) {
+                url += `&fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`;
+            }
+            
+            fetch(url)
                 .then(response => response.json())
                 .then(data => {
                     if (data.success && data.datos.labels.length > 0) {
@@ -193,7 +198,8 @@ if (!isset($_SESSION['admin_id'])) {
                         document.getElementById('chartLegend').innerHTML = '<p class="no-data">No hay datos</p>';
                         if (chartInstance) chartInstance.destroy();
                     }
-                });
+                })
+                .catch(error => console.error('Error al cargar gráfico:', error));
         }
         
         // Renderizar el gráfico con Chart.js
@@ -202,53 +208,80 @@ if (!isset($_SESSION['admin_id'])) {
             const colors = datos.labels.map((_, i) => colores[i % colores.length]);
             const tipoGrafico = document.getElementById('tipoGrafico').value;
             
-            if (chartInstance) chartInstance.destroy();
-            
-            // Configuración específica según tipo de gráfico
-            const config = {
-                type: tipoGrafico,
-                data: {
-                    labels: datos.labels,
-                    datasets: [{
-                        label: 'Reservas',
-                        data: datos.valores,
-                        backgroundColor: colors,
-                        borderColor: tipoGrafico === 'line' ? colors : undefined,
-                        borderWidth: tipoGrafico === 'line' ? 2 : undefined,
-                        borderRadius: tipoGrafico === 'bar' ? 6 : undefined,
-                        tension: tipoGrafico === 'line' ? 0.4 : undefined
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { 
-                        legend: { 
-                            display: tipoGrafico === 'pie' || tipoGrafico === 'doughnut',
-                            position: 'bottom'
-                        } 
-                    }
-                }
-            };
-            
-            // Agregar escalas solo para gráficos de barras y líneas
-            if (tipoGrafico === 'bar' || tipoGrafico === 'line') {
-                config.options.scales = { 
-                    y: { beginAtZero: true, ticks: { stepSize: 1 } } 
-                };
+            // Destruir gráfico anterior completamente
+            if (chartInstance) {
+                chartInstance.destroy();
+                chartInstance = null;
             }
             
-            chartInstance = new Chart(document.getElementById('graficoHabitaciones'), config);
+            // Recrear el canvas completamente para evitar problemas de renderizado
+            const wrapper = document.querySelector('.chart-wrapper');
+            const oldCanvas = document.getElementById('graficoHabitaciones');
+            if (oldCanvas) {
+                oldCanvas.remove();
+            }
             
-            // Generar leyenda
-            const total = datos.valores.reduce((a, b) => a + b, 0);
-            document.getElementById('chartLegend').innerHTML = datos.labels.map((label, i) => `
-                <div class="legend-item">
-                    <span class="legend-color" style="background: ${colors[i]}"></span>
-                    <span class="legend-text">${label}:</span>
-                    <span class="legend-value">${datos.valores[i]} (${((datos.valores[i]/total)*100).toFixed(1)}%)</span>
-                </div>
-            `).join('');
+            const newCanvas = document.createElement('canvas');
+            newCanvas.id = 'graficoHabitaciones';
+            wrapper.insertBefore(newCanvas, wrapper.firstChild);
+            
+            // Delay para asegurar que el canvas esté completamente renderizado
+            setTimeout(() => {
+                const canvas = document.getElementById('graficoHabitaciones');
+                if (!canvas) return;
+                
+                // Configuración específica según tipo de gráfico
+                const config = {
+                    type: tipoGrafico,
+                    data: {
+                        labels: datos.labels,
+                        datasets: [{
+                            label: 'Reservas',
+                            data: datos.valores,
+                            backgroundColor: colors,
+                            borderColor: tipoGrafico === 'line' ? colors[0] : undefined,
+                            borderWidth: tipoGrafico === 'line' ? 2 : undefined,
+                            borderRadius: tipoGrafico === 'bar' ? 6 : undefined,
+                            tension: tipoGrafico === 'line' ? 0.4 : undefined,
+                            fill: tipoGrafico === 'line' ? false : undefined
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { 
+                            legend: { 
+                                display: tipoGrafico === 'pie' || tipoGrafico === 'doughnut',
+                                position: 'bottom'
+                            } 
+                        }
+                    }
+                };
+                
+                // Agregar escalas solo para gráficos de barras y líneas
+                if (tipoGrafico === 'bar' || tipoGrafico === 'line') {
+                    config.options.scales = { 
+                        y: { beginAtZero: true, ticks: { stepSize: 1 } } 
+                    };
+                }
+                
+                chartInstance = new Chart(canvas, config);
+                
+                // Forzar actualización para gráficos de barras (bug de Chart.js)
+                if (tipoGrafico === 'bar') {
+                    setTimeout(() => chartInstance.update(), 50);
+                }
+                
+                // Generar leyenda
+                const total = datos.valores.reduce((a, b) => a + b, 0);
+                document.getElementById('chartLegend').innerHTML = datos.labels.map((label, i) => `
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: ${colors[i]}"></span>
+                        <span class="legend-text">${label}:</span>
+                        <span class="legend-value">${datos.valores[i]} (${((datos.valores[i]/total)*100).toFixed(1)}%)</span>
+                    </div>
+                `).join('');
+            }, 200);
         }
         
         // Cargar reportes según el periodo seleccionado
@@ -261,12 +294,12 @@ if (!isset($_SESSION['admin_id'])) {
                 const fechaInicio = document.getElementById('reportFechaInicio').value;
                 const fechaFin = document.getElementById('reportFechaFin').value;
                 
-                if (new Date(fechaInicio) > new Date(fechaFin)) {
+                if (!fechaInicio || !fechaFin) return;
+                if (fechaInicio > fechaFin) {
                     alert('La fecha de inicio debe ser anterior o igual a la fecha de fin.');
                     return;
                 }
-
-                url += `&fecha_inicio=${encodeURIComponent(fechaInicio)}&fecha_fin=${encodeURIComponent(fechaFin)}`;
+                url += `&fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`;
             }
 
             fetch(url)

@@ -9,11 +9,30 @@ if (!isset($_SESSION['admin_id'])) {
     exit;
 }
 
+// NUEVA FUNCIÓN: Actualizar estados de reservas finalizadas
+function actualizarReservasFinalizadas($conn) {
+    $today = date('Y-m-d');
+    
+    $sql = "UPDATE reserva 
+            SET estado = 'finalizada' 
+            WHERE estado = 'confirmada' 
+            AND fecha_salida < ?";
+    
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("s", $today);
+    $stmt->execute();
+    
+    return $stmt->affected_rows;
+}
+
 // Obtener la acción solicitada
 $action = isset($_POST['action']) ? $_POST['action'] : (isset($_GET['action']) ? $_GET['action'] : '');
 
 // Función para obtener todas las reservas con información de huéspedes
 function obtenerReservas($conn, $filtros = []) {
+    // Primero actualizar reservas finalizadas
+    actualizarReservasFinalizadas($conn);
+    
     $sql = "SELECT r.*, h.nombre, h.apellido, h.email, h.telefono, hab.tipo, hab.precio_por_noche 
             FROM reserva r 
             INNER JOIN huespedes h ON r.id_huesped = h.id_huesped 
@@ -106,7 +125,7 @@ function agregarReserva($conn, $datos) {
     // Verificar disponibilidad de la habitación
     $sql = "SELECT COUNT(*) as count FROM reserva 
             WHERE numero_habitacion = ? 
-            AND estado != 'cancelada'
+            AND estado NOT IN ('cancelada', 'finalizada')
             AND (
                 (fecha_entrada <= ? AND fecha_salida >= ?) OR
                 (fecha_entrada <= ? AND fecha_salida >= ?) OR
@@ -156,7 +175,7 @@ function actualizarReserva($conn, $id, $datos) {
     $sql = "SELECT COUNT(*) as count FROM reserva 
             WHERE numero_habitacion = ? 
             AND id_reserva != ?
-            AND estado != 'cancelada'
+            AND estado NOT IN ('cancelada', 'finalizada')
             AND (
                 (fecha_entrada <= ? AND fecha_salida >= ?) OR
                 (fecha_entrada <= ? AND fecha_salida >= ?) OR
@@ -252,25 +271,23 @@ function obtenerHuespedes($conn) {
     return $huespedes;
 }
 
-// CORRECCIÓN: Función mejorada para obtener habitaciones disponibles (excluyendo mantenimiento)
+// Función mejorada para obtener habitaciones disponibles (excluyendo mantenimiento, canceladas y finalizadas)
 function obtenerHabitacionesDisponibles($conn, $fecha_entrada, $fecha_salida, $id_reserva = null) {
-    // Primera parte: obtener habitaciones que NO están en mantenimiento
-    // y que NO tienen reservas en el rango de fechas
     $sql = "SELECT DISTINCT h.numero_habitacion, h.tipo, h.precio_por_noche, h.capacidad 
             FROM habitacion h 
             WHERE 1=1";
     
-    // CORRECCIÓN: Excluir habitaciones en mantenimiento si existe la columna estado
+    // Excluir habitaciones en mantenimiento si existe la columna estado
     $checkColumn = $conn->query("SHOW COLUMNS FROM habitacion LIKE 'estado'");
     if ($checkColumn && $checkColumn->num_rows > 0) {
         $sql .= " AND (h.estado IS NULL OR h.estado NOT LIKE '%manten%')";
     }
     
-    // Excluir habitaciones con reservas en el rango de fechas
+    // Excluir habitaciones con reservas activas en el rango de fechas
     $sql .= " AND h.numero_habitacion NOT IN (
                 SELECT r.numero_habitacion 
                 FROM reserva r 
-                WHERE r.estado != 'cancelada'";
+                WHERE r.estado NOT IN ('cancelada', 'finalizada')";
     
     if ($id_reserva !== null) {
         $sql .= " AND r.id_reserva != ?";

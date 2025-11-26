@@ -32,6 +32,7 @@ if (!isset($_SESSION['admin_id'])) {
                         <option value="todas">Todas las reservas</option>
                         <option value="confirmada">Confirmadas</option>
                         <option value="pendiente">Pendientes</option>
+                        <option value="finalizada">Finalizadas</option>
                         <option value="cancelada">Canceladas</option>
                     </select>
                     <input type="text" class="filter-input" id="filtroBusqueda" placeholder="Buscar por huésped..." onkeyup="filtrarReservas()">
@@ -105,6 +106,7 @@ if (!isset($_SESSION['admin_id'])) {
                     <select id="estado" name="estado">
                         <option value="confirmada">Confirmada</option>
                         <option value="pendiente">Pendiente</option>
+                        <option value="finalizada">Finalizada</option>
                         <option value="cancelada">Cancelada</option>
                     </select>
                 </div>
@@ -231,6 +233,25 @@ if (!isset($_SESSION['admin_id'])) {
             tbody.innerHTML = '';
             reservas.forEach(reserva => {
                 const tr = document.createElement('tr');
+                
+                // Generar botones según el estado
+                let botones = `<button class="btn btn-small btn-primary" onclick="verDetalles(${reserva.id_reserva})">Ver</button>`;
+                
+                // Solo mostrar editar si no está cancelada ni finalizada
+                if (reserva.estado !== 'cancelada' && reserva.estado !== 'finalizada') {
+                    botones += ` <button class="btn btn-small btn-secondary" onclick="openEditModal(${reserva.id_reserva})">Editar</button>`;
+                }
+                
+                // Mostrar confirmar solo si está pendiente
+                if (reserva.estado === 'pendiente') {
+                    botones += ` <button class="btn btn-small btn-success" onclick="confirmarReserva(${reserva.id_reserva})">Confirmar</button>`;
+                }
+                
+                // Mostrar cancelar solo si no está cancelada ni finalizada
+                if (reserva.estado !== 'cancelada' && reserva.estado !== 'finalizada') {
+                    botones += ` <button class="btn btn-small btn-danger" onclick="cancelarReserva(${reserva.id_reserva})">Cancelar</button>`;
+                }
+                
                 tr.innerHTML = `
                     <td>#${String(reserva.id_reserva).padStart(3, '0')}</td>
                     <td>${reserva.nombre} ${reserva.apellido}</td>
@@ -240,18 +261,7 @@ if (!isset($_SESSION['admin_id'])) {
                     <td>${reserva.dias}</td>
                     <td><span class="status ${reserva.estado}">${capitalizar(reserva.estado)}</span></td>
                     <td>\$${reserva.total.toFixed(2)}</td>
-                    <td>
-                        <button class="btn btn-small btn-primary" onclick="verDetalles(${reserva.id_reserva})">Ver</button>
-                        ${reserva.estado !== 'cancelada' ? `
-                            <button class="btn btn-small btn-secondary" onclick="openEditModal(${reserva.id_reserva})">Editar</button>
-                        ` : ''}
-                        ${reserva.estado === 'pendiente' ? `
-                            <button class="btn btn-small btn-success" onclick="confirmarReserva(${reserva.id_reserva})">Confirmar</button>
-                        ` : ''}
-                        ${reserva.estado !== 'cancelada' ? `
-                            <button class="btn btn-small btn-danger" onclick="cancelarReserva(${reserva.id_reserva})">Cancelar</button>
-                        ` : ''}
-                    </td>
+                    <td>${botones}</td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -383,12 +393,9 @@ if (!isset($_SESSION['admin_id'])) {
             document.getElementById('numero_habitacion').disabled = true;
             document.getElementById('numero_habitacion').innerHTML = '<option value="">Primero seleccione las fechas</option>';
             
-            // Cargar huéspedes cada vez que se abre el modal
             cargarHuespedes();
             
-            // Establecer fecha mínima como hoy
             const hoy = new Date();
-            // Ajustar a la zona horaria local
             hoy.setMinutes(hoy.getMinutes() - hoy.getTimezoneOffset());
             const fechaHoy = hoy.toISOString().split('T')[0];
             
@@ -404,7 +411,6 @@ if (!isset($_SESSION['admin_id'])) {
             document.getElementById('formAction').value = 'actualizar';
             document.getElementById('estadoGroup').style.display = 'block';
             
-            // Primero cargar los huéspedes, luego los datos de la reserva
             cargarHuespedes().then(() => {
                 fetch(`../includes/reservas_handler.php?action=obtener&id=${id}`)
                     .then(response => response.json())
@@ -412,42 +418,26 @@ if (!isset($_SESSION['admin_id'])) {
                         if (data.success) {
                             const reserva = data.data;
                             
-                            // Llenar todos los campos primero
                             document.getElementById('id_reserva').value = reserva.id_reserva;
                             document.getElementById('id_huesped').value = reserva.id_huesped;
                             document.getElementById('observaciones').value = reserva.observaciones || '';
                             document.getElementById('estado').value = reserva.estado;
                             
-                            // Llenar las fechas ANTES de cargar habitaciones
                             document.getElementById('fecha_entrada').value = reserva.fecha_entrada;
                             document.getElementById('fecha_salida').value = reserva.fecha_salida;
                             
-                            // Ahora sí, cargar habitaciones con las fechas ya establecidas
                             cargarHabitacionesDisponibles().then((success) => {
                                 if (success) {
-                                    // Usar requestAnimationFrame para asegurar que el DOM esté actualizado
                                     requestAnimationFrame(() => {
                                         const selectHabitacion = document.getElementById('numero_habitacion');
                                         selectHabitacion.value = reserva.numero_habitacion;
                                         
-                                        // Verificar si se seleccionó correctamente
                                         if (selectHabitacion.value !== String(reserva.numero_habitacion)) {
-                                            console.warn('Reintentando seleccionar habitación:', reserva.numero_habitacion);
-                                            // Intentar de nuevo con un pequeño delay
                                             setTimeout(() => {
                                                 selectHabitacion.value = reserva.numero_habitacion;
-                                                if (selectHabitacion.value !== String(reserva.numero_habitacion)) {
-                                                    console.error('No se pudo seleccionar la habitación después de reintentar');
-                                                } else {
-                                                    console.log('Habitación seleccionada correctamente en segundo intento');
-                                                }
                                             }, 200);
-                                        } else {
-                                            console.log('Habitación seleccionada correctamente:', reserva.numero_habitacion);
                                         }
                                     });
-                                } else {
-                                    console.error('No se pudieron cargar las habitaciones disponibles');
                                 }
                             });
                             
@@ -455,14 +445,7 @@ if (!isset($_SESSION['admin_id'])) {
                         } else {
                             alert('Error al cargar los datos: ' + data.message);
                         }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        alert('Error al cargar los datos de la reserva');
                     });
-            }).catch(error => {
-                console.error('Error al cargar huéspedes:', error);
-                alert('Error al cargar la lista de huéspedes');
             });
         }
         

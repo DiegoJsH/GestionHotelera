@@ -7,12 +7,9 @@ if (!isset($_SESSION['admin_id'])) {
 
 include "../includes/db_connection.php";
 
-/*
-  Consultas para estadísticas dinámicas - CORREGIDO
-*/
 $today = date('Y-m-d');
 
-// CORRECCIÓN: Contar habitaciones ocupadas basado en reservas activas HOY
+// ACTUALIZADO: Contar habitaciones ocupadas HOY (solo confirmadas, no finalizadas)
 $ocupadas = 0;
 if ($stmt = $conn->prepare("SELECT COUNT(DISTINCT r.numero_habitacion) AS cnt 
                              FROM reserva r 
@@ -26,9 +23,11 @@ if ($stmt = $conn->prepare("SELECT COUNT(DISTINCT r.numero_habitacion) AS cnt
     $stmt->close();
 }
 
-// Reservas Hoy (cantidad de reservas cuyo rango incluye hoy)
+// ACTUALIZADO: Reservas Hoy (solo confirmadas, excluyendo finalizadas y canceladas)
 $reservas_hoy = 0;
-if ($stmt = $conn->prepare("SELECT COUNT(*) AS cnt FROM reserva WHERE fecha_entrada <= ? AND fecha_salida >= ? AND estado != 'cancelada'")) {
+if ($stmt = $conn->prepare("SELECT COUNT(*) AS cnt FROM reserva 
+                             WHERE fecha_entrada <= ? AND fecha_salida >= ? 
+                             AND estado = 'confirmada'")) {
     $stmt->bind_param('ss', $today, $today);
     $stmt->execute();
     $res = $stmt->get_result();
@@ -44,7 +43,7 @@ if ($result = $conn->query("SELECT COUNT(*) AS cnt FROM huespedes")) {
     $huespedes_activos = intval($row['cnt'] ?? 0);
 }
 
-// Intentar obtener total de habitaciones si existe la tabla 'habitaciones'
+// Total de habitaciones
 $total_habitaciones = null;
 $habitaciones_exist = false;
 if ($res = $conn->query("SHOW TABLES LIKE 'habitacion'")) {
@@ -57,7 +56,7 @@ if ($res = $conn->query("SHOW TABLES LIKE 'habitacion'")) {
     }
 }
 
-// CORRECCIÓN: Ingresos hoy - calcular desde reservas que están ACTIVAS hoy (no solo las que inician hoy)
+// ACTUALIZADO: Ingresos hoy - solo de reservas confirmadas activas
 $ingresos_hoy = 0;
 if ($stmt = $conn->prepare("SELECT SUM(DATEDIFF(r.fecha_salida, r.fecha_entrada) * h.precio_por_noche) AS total 
                              FROM reserva r 
@@ -73,7 +72,9 @@ if ($stmt = $conn->prepare("SELECT SUM(DATEDIFF(r.fecha_salida, r.fecha_entrada)
 
 // Recent activity: últimas 6 reservas
 $actividad = [];
-if ($stmt = $conn->prepare("SELECT r.*, h.nombre, h.apellido FROM reserva r LEFT JOIN huespedes h ON r.id_huesped = h.id_huesped ORDER BY r.fecha_hora_reserva DESC LIMIT 6")) {
+if ($stmt = $conn->prepare("SELECT r.*, h.nombre, h.apellido FROM reserva r 
+                             LEFT JOIN huespedes h ON r.id_huesped = h.id_huesped 
+                             ORDER BY r.fecha_hora_reserva DESC LIMIT 6")) {
     $stmt->execute();
     $res = $stmt->get_result();
     while ($row = $res->fetch_assoc()) {
@@ -82,16 +83,14 @@ if ($stmt = $conn->prepare("SELECT r.*, h.nombre, h.apellido FROM reserva r LEFT
     $stmt->close();
 }
 
-// Estado de habitaciones: si existe tabla habitaciones, contar por estado
+// Estado de habitaciones
 $ocupadas_detalle = $ocupadas;
 $disponibles = null;
 $en_mantenimiento = 0;
 if ($habitaciones_exist) {
     if ($total_habitaciones !== null) {
-        // CORRECCIÓN: Calcular disponibles correctamente
         $disponibles = $total_habitaciones - $ocupadas_detalle;
         
-        // Restar habitaciones en mantenimiento
         $colEstado = $conn->query("SHOW COLUMNS FROM habitacion LIKE 'estado'");
         if ($colEstado && $colEstado->num_rows > 0) {
             if ($r = $conn->query("SELECT COUNT(*) AS cnt FROM habitacion WHERE estado LIKE '%manten%' OR estado LIKE '%mant%'")) {
@@ -140,21 +139,21 @@ if ($habitaciones_exist) {
                         <div class="stat-card">
                             <div class="stat-icon">📅</div>
                             <div class="stat-info">
-                                <h3>Reservas Hoy</h3>
+                                <h3>Reservas Activas Hoy</h3>
                                 <p class="stat-number"><?php echo $reservas_hoy; ?></p>
                             </div>
                         </div>
                         <div class="stat-card">
                             <div class="stat-icon">👥</div>
                             <div class="stat-info">
-                                <h3>Huéspedes Activos</h3>
+                                <h3>Huéspedes Registrados</h3>
                                 <p class="stat-number"><?php echo $huespedes_activos; ?></p>
                             </div>
                         </div>
                         <div class="stat-card">
                             <div class="stat-icon">💰</div>
                             <div class="stat-info">
-                                <h3>Ingresos Hoy</h3>
+                                <h3>Ingresos Activos Hoy</h3>
                                 <p class="stat-number">$<?php echo number_format($ingresos_hoy, 2, '.', ','); ?></p>
                             </div>
                         </div>
@@ -171,7 +170,11 @@ if ($habitaciones_exist) {
                                         <div class="activity-item">
                                             <span class="activity-time"><?php echo date('d/m H:i', strtotime($a['fecha_hora_reserva'])); ?></span>
                                             <span class="activity-text">
-                                                Reserva: Hab. <?php echo htmlspecialchars($a['numero_habitacion']); ?> - <?php echo htmlspecialchars(($a['nombre'] ?? '') . ' ' . ($a['apellido'] ?? '')); ?>
+                                                <span class="status <?php echo htmlspecialchars($a['estado']); ?>" style="font-size: 10px; padding: 2px 6px;">
+                                                    <?php echo ucfirst(htmlspecialchars($a['estado'])); ?>
+                                                </span>
+                                                Hab. <?php echo htmlspecialchars($a['numero_habitacion']); ?> - 
+                                                <?php echo htmlspecialchars(($a['nombre'] ?? '') . ' ' . ($a['apellido'] ?? '')); ?>
                                                 (<?php echo htmlspecialchars($a['fecha_entrada']); ?> → <?php echo htmlspecialchars($a['fecha_salida']); ?>)
                                             </span>
                                         </div>

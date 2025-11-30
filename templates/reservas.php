@@ -126,68 +126,70 @@ if (!isset($_SESSION['admin_id'])) {
 
     <!-- Modal para ver detalles -->
     <div id="viewReservationModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>Detalles de la Reserva</h2>
-                <span class="close" onclick="closeViewModal()">&times;</span>
-            </div>
-            <div class="modal-form">
-                <div class="form-group">
-                    <label><strong>ID Reserva:</strong></label>
-                    <p id="view_id_reserva"></p>
+        <div class="modal-content-padre">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Detalles de la Reserva</h2>
+                    <span class="close" onclick="closeViewModal()">&times;</span>
                 </div>
-                <div class="form-group">
-                    <label><strong>Huésped:</strong></label>
-                    <p id="view_huesped"></p>
-                </div>
-                <div class="form-group">
-                    <label><strong>Email:</strong></label>
-                    <p id="view_email"></p>
-                </div>
-                <div class="form-group">
-                    <label><strong>Teléfono:</strong></label>
-                    <p id="view_telefono"></p>
-                </div>
-                <div class="form-row">
+                <div class="modal-form">
                     <div class="form-group">
-                        <label><strong>Habitación:</strong></label>
-                        <p id="view_habitacion"></p>
+                        <label><strong>ID Reserva:</strong></label>
+                        <p id="view_id_reserva"></p>
                     </div>
                     <div class="form-group">
-                        <label><strong>Tipo:</strong></label>
-                        <p id="view_tipo"></p>
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label><strong>Check-in:</strong></label>
-                        <p id="view_fecha_entrada"></p>
+                        <label><strong>Huésped:</strong></label>
+                        <p id="view_huesped"></p>
                     </div>
                     <div class="form-group">
-                        <label><strong>Check-out:</strong></label>
-                        <p id="view_fecha_salida"></p>
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label><strong>Días:</strong></label>
-                        <p id="view_dias"></p>
+                        <label><strong>Email:</strong></label>
+                        <p id="view_email"></p>
                     </div>
                     <div class="form-group">
-                        <label><strong>Estado:</strong></label>
-                        <p id="view_estado"></p>
+                        <label><strong>Teléfono:</strong></label>
+                        <p id="view_telefono"></p>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label><strong>Total:</strong></label>
-                    <p id="view_total"></p>
-                </div>
-                <div class="form-group">
-                    <label><strong>Observaciones:</strong></label>
-                    <p id="view_observaciones"></p>
-                </div>
-                <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary" onclick="closeViewModal()">Cerrar</button>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label><strong>Habitación:</strong></label>
+                            <p id="view_habitacion"></p>
+                        </div>
+                        <div class="form-group">
+                            <label><strong>Tipo:</strong></label>
+                            <p id="view_tipo"></p>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label><strong>Check-in:</strong></label>
+                            <p id="view_fecha_entrada"></p>
+                        </div>
+                        <div class="form-group">
+                            <label><strong>Check-out:</strong></label>
+                            <p id="view_fecha_salida"></p>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label><strong>Días:</strong></label>
+                            <p id="view_dias"></p>
+                        </div>
+                        <div class="form-group">
+                            <label><strong>Estado:</strong></label>
+                            <p id="view_estado"></p>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label><strong>Total:</strong></label>
+                        <p id="view_total"></p>
+                    </div>
+                    <div class="form-group">
+                        <label><strong>Observaciones:</strong></label>
+                        <p id="view_observaciones"></p>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-secondary" onclick="closeViewModal()">Cerrar</button>
+                    </div>
                 </div>
             </div>
         </div>

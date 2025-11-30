@@ -768,6 +768,19 @@ body {
   width: 500px;
   max-width: 90%;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+  height: 95%;
+  overflow: auto;
+}
+
+.modal-content-padre {
+  background-color: white;
+  margin: 5% auto;
+  padding: 0;
+  border-radius: 12px;
+  width: 550px;
+  max-width: 90%;
+  height: 95%;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
 }
 
 .modal-content.large {

@@ -475,6 +475,65 @@ if (!isset($_SESSION['admin_id'])) {
             // Línea separadora
             y += 10;
             doc.line(20, y, 190, y);
+
+            // ===== NUEVA SECCIÓN: Ingresos por Día =====
+    y += 10;
+    doc.setFontSize(14);
+    doc.text('Ingresos por Día', 20, y);
+    
+    y += 10;
+    doc.setFontSize(9);
+    
+    if (reportesData.ingresos_diarios && reportesData.ingresos_diarios.ingresos.length > 0) {
+        // Encabezados de la tabla
+        doc.setFont(undefined, 'bold');
+        doc.text('Fecha', 25, y);
+        doc.text('Día', 55, y);
+        doc.text('Reservas', 90, y);
+        doc.text('Ingresos', 130, y);
+        
+        y += 7;
+        doc.setFont(undefined, 'normal');
+        
+        // Limitar a las primeras 15 entradas para no sobrecargar el PDF
+        const maxDias = Math.min(reportesData.ingresos_diarios.ingresos.length, 15);
+        
+        for (let i = 0; i < maxDias; i++) {
+            const dia = reportesData.ingresos_diarios.ingresos[i];
+            
+            // Si llegamos al final de la página, crear una nueva
+            if (y > 270) {
+                doc.addPage();
+                y = 20;
+                
+                // Repetir encabezados en nueva página
+                doc.setFont(undefined, 'bold');
+                doc.text('Fecha', 25, y);
+                doc.text('Día', 55, y);
+                doc.text('Reservas', 90, y);
+                doc.text('Ingresos', 130, y);
+                y += 7;
+                doc.setFont(undefined, 'normal');
+            }
+            
+            doc.text(`${dia.fecha_formateada}`, 25, y);
+            doc.text(`${dia.dia_semana}`, 55, y);
+            doc.text(`${dia.num_reservas}`, 90, y);
+            doc.text(`$${dia.total_ingresos.toFixed(2)}`, 130, y);
+        }
+        
+    }
+    
+    // Línea separadora
+    y += 10;
+    
+    // Si estamos muy abajo, crear nueva página
+    if (y > 250) {
+        doc.addPage();
+        y = 20;
+    }
+    
+    doc.line(20, y, 190, y);
             
             // Sección: Estadísticas Generales
             y += 10;

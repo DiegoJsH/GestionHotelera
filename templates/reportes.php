@@ -520,13 +520,12 @@ if (!isset($_SESSION['admin_id'])) {
             doc.text(`${dia.dia_semana}`, 55, y);
             doc.text(`${dia.num_reservas}`, 90, y);
             doc.text(`$${dia.total_ingresos.toFixed(2)}`, 130, y);
+
+            y += 7;
         }
         
     }
-    
-    // Línea separadora
-    y += 10;
-    
+        
     // Si estamos muy abajo, crear nueva página
     if (y > 250) {
         doc.addPage();
